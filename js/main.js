@@ -159,15 +159,30 @@ function main() {
   let frames = 0;
   let lastFpsTime = performance.now();
 
-  function loop() {
-    applyInput();          // painting works even while paused
-    if (!paused && !run.choosing) {
-      simStep();
-      if (playMode) {
-        updatePlayer();
-        updateCreatures();
-        updateSpells();
-        updateGame();
+  // Fixed timestep: the sim always runs at 60 steps/s regardless of the
+  // display's refresh rate (a 144Hz monitor gets 144 renders but still 60
+  // sim steps — otherwise the game speed follows the monitor).
+  const SIM_DT = 1000 / 60;
+  let simAccum = 0;
+  let lastTime = performance.now();
+
+  function loop(now) {
+    simAccum += now - lastTime;
+    lastTime = now;
+    // returning from a background tab: don't fast-forward the backlog
+    if (simAccum > 250) simAccum = 250;
+
+    while (simAccum >= SIM_DT) {
+      simAccum -= SIM_DT;
+      applyInput();          // painting/casting tick at sim rate, even paused
+      if (!paused && !run.choosing) {
+        simStep();
+        if (playMode) {
+          updatePlayer();
+          updateCreatures();
+          updateSpells();
+          updateGame();
+        }
       }
     }
     updateCamera();
@@ -188,7 +203,6 @@ function main() {
     }
 
     frames++;
-    const now = performance.now();
     if (now - lastFpsTime >= 500) {
       hudFps.textContent = Math.round(frames * 1000 / (now - lastFpsTime));
       hudCells.textContent = count;
