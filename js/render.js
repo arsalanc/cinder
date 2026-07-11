@@ -11,7 +11,7 @@ let displayCanvas, displayCtx, bufferCanvas, bufferCtx, imageData, pixels;
 // with a zoomed window (M toggles back to the full map).
 const camera = { x: 0, y: 0, w: SIM_W, h: SIM_H };
 let cameraFollow = true;
-const VIEW_W = 160, VIEW_H = 100;
+let VIEW_W = 160, VIEW_H = 100; // main.js tightens this on touch devices
 
 function updateCamera() {
   const follow = typeof playMode !== 'undefined' && playMode && cameraFollow && player.alive;

@@ -10,6 +10,8 @@ const PALETTE = [
 
 let paused = false;
 let playMode = false;
+const isTouch = typeof matchMedia !== 'undefined' &&
+  (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window);
 let hudBrush, hudFps, hudCells, hudBiome, pauseBtn, seedInput;
 let hpRow, hpFill, hudStatus, manaFill, fuelFill;
 
@@ -20,6 +22,7 @@ function togglePlayMode() {
   document.getElementById('mana-row').style.display = playMode ? 'flex' : 'none';
   document.getElementById('fuel-row').style.display = playMode ? 'flex' : 'none';
   document.getElementById('hotbar').style.display = playMode ? 'flex' : 'none';
+  document.getElementById('touch').style.display = (playMode && isTouch) ? 'block' : 'none';
   document.getElementById('mods').style.display = playMode ? 'block' : 'none';
   if (playMode) {
     startRun();
@@ -110,6 +113,22 @@ function main() {
   // browsers require a user gesture before audio can start
   window.addEventListener('pointerdown', initAudio, { once: true });
   window.addEventListener('keydown', initAudio, { once: true });
+
+  if (isTouch) {
+    // tighter camera so cells are readable on a small screen
+    VIEW_W = 120; VIEW_H = 75;
+    const bindTouch = (id, key) => {
+      const el = document.getElementById(id);
+      const set = v => e => { e.preventDefault(); input.keys[key] = v; };
+      el.addEventListener('pointerdown', set(true));
+      el.addEventListener('pointerup', set(false));
+      el.addEventListener('pointercancel', set(false));
+      el.addEventListener('pointerleave', set(false));
+    };
+    bindTouch('tleft', 'a');
+    bindTouch('tright', 'd');
+    bindTouch('tjump', 'w'); // hold = jetpack/climb/swim, same as W
+  }
 
   buildPalette();
   initRenderer(canvas);
