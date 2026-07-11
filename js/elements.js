@@ -28,6 +28,11 @@ const E = {
   SEED: 17,    // dropped by plants; floats on water, germinates near it
   ASH: 18,     // what fire leaves behind; fertilizes water into plants
   BUG: 19,     // cellular grazer: eats plants, breeds, starves back to ash
+  SNOW: 20,    // cold precipitation; piles, melts near heat, dissolves in water
+  METAL: 21,   // conducts electricity along its surface; corrodes in acid
+  GLASS: 22,   // lava + sand; acid-proof, shatters in explosions
+  HYDROGEN: 23, // electrolysis gas; rises, accumulates at ceilings, flash-burns
+  PRED: 24,    // hunter: eats bugs — the second trophic level
 };
 
 // Movement archetypes
@@ -74,9 +79,18 @@ const DEFS = {
                    dissolvable: true },
   [E.BUG]:       { name: 'Bug',       type: T.BUG,    color: [128, 54, 42],   colorVar: 24, density: 45,
                    flammability: 0.3, burnLife: 40, lifeMin: 240, lifeMax: 320, dissolvable: true },
+  [E.SNOW]:      { name: 'Snow',      type: T.POWDER, color: [236, 240, 248], colorVar: 10, density: 20,
+                   dissolvable: true },
+  [E.METAL]:     { name: 'Metal',     type: T.STATIC, color: [142, 148, 158], colorVar: 8,  density: 100,
+                   dissolvable: true },
+  [E.GLASS]:     { name: 'Glass',     type: T.STATIC, color: [186, 214, 222], colorVar: 6,  density: 100 }, // acid-proof
+  [E.HYDROGEN]:  { name: 'Hydrogen',  type: T.GAS,    color: [196, 178, 214], colorVar: 8,  density: 1,
+                   flammability: 0.9, burnLife: 8 }, // no lifetime: pockets persist until ignited
+  [E.PRED]:      { name: 'Hunter',    type: T.BUG,    color: [152, 44, 74],   colorVar: 20, density: 45,
+                   flammability: 0.3, burnLife: 40, lifeMin: 300, lifeMax: 400, dissolvable: true },
 };
 
-const NUM_ELEMENTS = 20;
+const NUM_ELEMENTS = 25;
 
 // Flat typed lookups for the hot sim loop
 const TYPE        = new Uint8Array(NUM_ELEMENTS);
@@ -159,3 +173,16 @@ addReaction(E.ASH, E.WATER, E.PLANT, E.EMPTY, 0.004);
 addReaction(E.WATER, E.ASH, E.EMPTY, E.PLANT, 0.004);
 // Burning vegetation releases its moisture as steam (fires seed rain)
 addReaction(E.PLANT, E.FIRE, E.STEAM, E.FIRE, 0.04);
+
+// Glassmaking: lava fuses sand
+addReaction(E.SAND, E.LAVA, E.GLASS, E.LAVA, 0.08);
+addReaction(E.LAVA, E.SAND, E.LAVA, E.GLASS, 0.08);
+
+// Snow: melts near heat, flashes to steam on lava, dissolves in water
+addReaction(E.SNOW, E.FIRE, E.WATER, E.FIRE, 0.5);
+addReaction(E.SNOW, E.LAVA, E.STEAM, E.LAVA, 0.6);
+addReaction(E.SNOW, E.WATER, E.WATER, E.WATER, 0.05);
+
+// Electrolysis: heavily electrified water bubbles off a little hydrogen
+// (kept slow — charging a pool shouldn't meaningfully drain it)
+addReaction(E.EWATER, E.EWATER, E.HYDROGEN, E.EWATER, 0.0008);

@@ -75,6 +75,28 @@ function startRun() {
   hideOverlay();
 }
 
+function isBossDepth(d) {
+  return d === 3 || d === WIN_DEPTH;
+}
+
+function bossAlive() {
+  return creatures.some(c => CREATURE_TYPES[c.key].boss);
+}
+
+function spawnBoss() {
+  const key = run.depth >= WIN_DEPTH ? 'tempest' : 'magmaworm';
+  const t = CREATURE_TYPES[key];
+  // arena pocket beside the portal it guards
+  const bx = Math.max(14, Math.min(SIM_W - 14, portal.x + (rand() < 0.5 ? -16 : 16)));
+  const by = Math.max(14, portal.y - 6);
+  digCircle(bx, by, 9);
+  creatures.push({
+    key, x: bx - t.w / 2, y: by - t.h / 2, vx: 0, vy: 0,
+    w: t.w, h: t.h, hp: t.hp, dir: 1, burning: 0, hurtFlash: 0,
+    bob: 0, attackCd: 90,
+  });
+}
+
 function beginLevel() {
   generateWorld(run.seed + '#' + run.depth, run.depth);
   spawnPlayer();
@@ -82,8 +104,15 @@ function beginLevel() {
     Math.round(player.x + player.w / 2),
     Math.round(player.y + player.h / 2));
   placePortal(reach);
-  placeShards(reach);
-  spawnCreatures(run.depth);
+  if (isBossDepth(run.depth)) {
+    shards.length = 0; // boss levels: slay the guardian instead of gathering
+    spawnCreatures(Math.max(1, run.depth - 2)); // lighter trash-mob presence
+    spawnBoss();
+  } else {
+    placeShards(reach);
+    spawnCreatures(run.depth);
+  }
+  resetWeather();
   updateRunHUD();
 }
 
@@ -215,8 +244,9 @@ function updateGame() {
     const dx = pcx - portal.x;
     const dy = pcy - portal.y;
     const nearPortal = dx * dx + dy * dy < 30;
-    run.portalHint = nearPortal && shardsRemaining() > 0;
-    if (nearPortal && shardsRemaining() === 0) levelComplete();
+    const cleared = shardsRemaining() === 0 && !bossAlive();
+    run.portalHint = nearPortal && !cleared;
+    if (nearPortal && cleared) levelComplete();
   } else if (!run.dead) {
     run.dead = true;
     const unlocked = finishRun(false);
@@ -297,12 +327,26 @@ function updateRunHUD() {
   if (typeof document === 'undefined') return;
   document.getElementById('hud-depth').textContent = run.active
     ? 'D' + run.depth + '/' + WIN_DEPTH +
-      (shards.length ? ' ◆' + (shards.length - shardsRemaining()) + '/' + shards.length : '')
+      (isBossDepth(run.depth) ? ' ☠'
+        : shards.length ? ' ◆' + (shards.length - shardsRemaining()) + '/' + shards.length : '')
     : '';
   document.getElementById('mods').textContent =
     run.mods.length ? run.mods.join(' · ') : '';
   document.getElementById('meta').textContent =
     'Best D' + meta.bestDepth + ' · Wins ' + meta.wins + ' · Kills ' + meta.kills;
+}
+
+function drawBossBar() {
+  if (!run.active) return;
+  const b = creatures.find(c => CREATURE_TYPES[c.key].boss);
+  if (!b) return;
+  const t = CREATURE_TYPES[b.key];
+  const w = displayCanvas.width * 0.4;
+  const x = (displayCanvas.width - w) / 2;
+  displayCtx.fillStyle = 'rgba(10, 10, 16, 0.7)';
+  displayCtx.fillRect(x - 2, 8, w + 4, 12);
+  displayCtx.fillStyle = '#d84a3a';
+  displayCtx.fillRect(x, 10, w * Math.max(0, b.hp / t.hp), 8);
 }
 
 function drawPortal() {
@@ -325,7 +369,7 @@ function drawPortal() {
 
   const sx = (portal.x - camera.x) * cw;
   const sy = (portal.y - camera.y) * ch;
-  if (shardsRemaining() > 0) {
+  if (shardsRemaining() > 0 || bossAlive()) {
     // dormant: dim, barely breathing
     displayCtx.fillStyle = 'rgba(110, 95, 140, 0.15)';
     displayCtx.fillRect(sx - 4 * cw, sy - 5 * ch, 8 * cw, 10 * ch);

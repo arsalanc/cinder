@@ -73,12 +73,12 @@ function fbm(noise, x, y, octaves) {
 // (0 = just below the surface, 1 = bottom of the map)
 
 const BIOMES = [
-  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, depth: [0, 1] },
+  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, temp: 12,  depth: [0, 1] },
   { name: 'Overgrown Vault', base: E.STONE, vein: E.WOOD,      veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.40, deco: E.PLANT, decoAmount: 0.85,
-    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, depth: [0, 0.6] },
-  { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    depth: [0, 0.7] },
-  { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    depth: [0.3, 1],  hazardous: true },
-  { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    depth: [0.55, 1], hazardous: true },
+    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, temp: 22, depth: [0, 0.6] },
+  { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    temp: -12, depth: [0, 0.7] },
+  { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    temp: 18,  depth: [0.3, 1],  hazardous: true },
+  { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    temp: 55,  depth: [0.55, 1], hazardous: true },
 ];
 
 const worldBiomeMap = new Uint8Array(CELLS);
@@ -262,9 +262,9 @@ function generateWorld(seedStr, runDepth = 0) {
       const floor = isGrowBase(grid[i + SIM_W]);
       const wall = isGrowBase(grid[i - 1]) || isGrowBase(grid[i + 1]);
 
-      // ambient fauna: grazing bugs on cave floors
+      // ambient fauna: mostly grazers, the odd hunter to keep them honest
       if (biome.fauna && floor && rng() < biome.fauna) {
-        setCell(i, E.BUG);
+        setCell(i, rng() < 0.12 ? E.PRED : E.BUG);
         continue;
       }
       if (!biome.deco) continue;
@@ -300,6 +300,16 @@ function generateWorld(seedStr, runDepth = 0) {
       setCell(idx(x, surf[x]), E.PLANT);
     }
   }
+
+  // 9. ambient temperature from the biome map (ice caves are freezing, the
+  //    volcanic depths swelter) — the field starts at its equilibrium
+  for (let ty = 0; ty < TEMP_H; ty++) {
+    for (let tx = 0; tx < TEMP_W; tx++) {
+      const b = BIOMES[worldBiomeMap[idx(tx * 4 + 2, ty * 4 + 2)]];
+      ambientTemp[ty * TEMP_W + tx] = b.temp;
+    }
+  }
+  temp.set(ambientTemp);
 }
 
 function biomeNameAt(x, y) {

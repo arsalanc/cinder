@@ -15,6 +15,7 @@ const _sfxLast = {};
 const SFX_THROTTLE = {
   explosion: 120, hit: 60, squish: 80, hurt: 150,
   zap: 40, spray: 45, dig: 60, lob: 80, spit: 60, jet: 110, flame: 70, arc: 90,
+  thunder: 500,
 };
 
 function initAudio() {
@@ -75,6 +76,7 @@ const SFX = {
   jet()       { _noise(0.14, 800, 0.12, 'bandpass'); },
   flame()     { _noise(0.1, 500, 0.2); },
   arc()       { _tone('square', 1600, 300, 0.08, 0.35); _noise(0.05, 3200, 0.15, 'highpass'); },
+  thunder()   { _noise(0.7, 280, 0.9); _tone('sine', 55, 30, 0.6, 0.5); },
   spray()     { _noise(0.06, 1400, 0.25, 'bandpass'); },
   dig()       { _noise(0.12, 350, 0.7); },
   lob()       { _noise(0.16, 700, 0.3, 'bandpass'); },

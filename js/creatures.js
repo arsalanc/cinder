@@ -24,6 +24,17 @@ const CREATURE_TYPES = {
     color: '#7ec850', sight: 80,
     ranged: { cooldown: 110, speed: 1.6, dmg: 6 },
   },
+  // --- bosses (guard the portal on depths 3 and 6) --------------------------
+  magmaworm: { // tunnels straight through terrain toward you, trailing lava
+    w: 6, h: 4, hp: 260, speed: 0.32, fly: true, burrow: true, contactDmg: 16,
+    color: '#e2581a', sight: 400, lavaTrail: 0.07,
+    fireImmune: true, waterDmg: 0.5, boss: true,
+  },
+  tempest: { // storm elemental: hurls arc globs, electrifies water around it
+    w: 5, h: 5, hp: 220, speed: 0.42, fly: true, contactDmg: 12,
+    color: '#9adcff', sight: 400, boss: true, elecAura: true,
+    ranged: { cooldown: 85, speed: 2.0, dmg: 8, kind: 'elec' },
+  },
 };
 
 // which creatures each biome spawns (weighted); this is the biome-flavor knob
@@ -120,6 +131,14 @@ function killCreature(i) {
     splash(cx, cy, 1, E.SMOKE);
   }
   wand.mana = Math.min(wand.maxMana, wand.mana + 10); // kill reward
+  if (t.boss) {
+    // slaying a guardian: big heal, full mana, and a death throe
+    player.hp = Math.min(player.maxHp, player.hp + 30);
+    wand.mana = wand.maxMana;
+    if (t.lavaTrail) splash(cx, cy, 3, E.LAVA);
+    if (t.elecAura) electrify(cx, cy, 6);
+    playSfx('explosion');
+  }
   if (typeof run !== 'undefined' && run.active) { run.kills++; meta.kills++; }
   playSfx('squish');
 }
@@ -140,12 +159,18 @@ function updateCreatures() {
       for (let cx = x0; cx <= x1; cx++) {
         if (cx < 0 || cx >= SIM_W) continue;
         const id = grid[idx(cx, cy)];
-        if (id === E.WATER) touchedWater = true;
-        else if (id === E.FIRE) { dmg += 0.4; c.burning = 120; }
-        else if (id === E.LAVA) { dmg += 0.9; c.burning = 180; }
+        if (id === E.WATER) {
+          touchedWater = true;
+          if (t.waterDmg) { // magma sizzles
+            dmg += t.waterDmg;
+            if (rand() < 0.15) setCell(idx(cx, cy), E.STEAM);
+          }
+        }
+        else if (id === E.FIRE) { if (!t.fireImmune) { dmg += 0.4; c.burning = 120; } }
+        else if (id === E.LAVA) { if (!t.fireImmune) { dmg += 0.9; c.burning = 180; } }
         else if (id === E.ACID) dmg += 0.35;
-        else if (id === E.ELEC) dmg += 1.2;
-        else if (id === E.EWATER) dmg += 0.8;
+        else if (id === E.ELEC) { if (!t.elecAura) dmg += 1.2; }
+        else if (id === E.EWATER) { if (!t.elecAura) dmg += 0.8; }
       }
     }
     if (touchedWater) {
@@ -170,6 +195,60 @@ function updateCreatures() {
     const dist = Math.hypot(dx, dy) || 1;
     const chase = player.alive && dist < t.sight;
 
+    // ranged types lob a glob instead of closing in (spitters: acid;
+    // the tempest: arcing electricity)
+    if (t.ranged) {
+      c.attackCd--;
+      if (chase && dist > 10 && c.attackCd <= 0) {
+        c.attackCd = t.ranged.cooldown + (rand() * 40) | 0;
+        eProjectiles.push({
+          x: ccx, y: ccy - 1,
+          vx: dx / dist * t.ranged.speed,
+          vy: dy / dist * t.ranged.speed - 0.45, // loft the shot
+          dmg: t.ranged.dmg,
+          kind: t.ranged.kind || 'acid',
+        });
+        playSfx(t.ranged.kind === 'elec' ? 'arc' : 'spit');
+      }
+    }
+    // storm aura: electrify nearby water
+    if (t.elecAura) {
+      for (let k = 0; k < 3; k++) {
+        const ax = Math.round(ccx + rand() * 14 - 7);
+        const ay = Math.round(ccy + rand() * 14 - 7);
+        if (ax > 0 && ax < SIM_W - 1 && ay > 0 && ay < SIM_H - 1) {
+          const j = idx(ax, ay);
+          if (grid[j] === E.WATER) setCell(j, E.EWATER);
+        }
+      }
+    }
+
+    if (t.burrow) {
+      // tunnel straight toward the player through anything but WALL
+      if (dist > 3) {
+        c.x += dx / dist * t.speed;
+        c.y += dy / dist * t.speed;
+      }
+      const bx = Math.round(c.x + c.w / 2), by = Math.round(c.y + c.h / 2);
+      digCircle(bx, by, 3);
+      if (rand() < t.lavaTrail) {
+        const lx = Math.max(1, Math.min(SIM_W - 2, bx - Math.sign(dx) * 4));
+        const j = idx(lx, by);
+        if (grid[j] === E.EMPTY) setCell(j, E.LAVA);
+      }
+      // contact damage, then next creature (no gravity/collision for a worm)
+      if (player.alive && player.hurtCd <= 0 &&
+          c.x < player.x + player.w && c.x + c.w > player.x &&
+          c.y < player.y + player.h && c.y + c.h > player.y) {
+        player.hp -= t.contactDmg;
+        player.hurtCd = 45;
+        playSfx('hurt');
+        for (const hook of runState.onDamage) hook(t.contactDmg);
+        if (player.hp <= 0) { player.hp = 0; player.alive = false; }
+      }
+      continue;
+    }
+
     if (t.fly) {
       c.bob += 0.08;
       let tvx, tvy;
@@ -189,20 +268,6 @@ function updateCreatures() {
     } else {
       if (chase) c.dir = dx > 0 ? 1 : -1;
       else if (rand() < 0.008) c.dir = -c.dir;
-      // ranged types lob a glob instead of closing in
-      if (t.ranged) {
-        c.attackCd--;
-        if (chase && dist > 10 && c.attackCd <= 0) {
-          c.attackCd = t.ranged.cooldown + (rand() * 40) | 0;
-          eProjectiles.push({
-            x: ccx, y: ccy - 1,
-            vx: dx / dist * t.ranged.speed,
-            vy: dy / dist * t.ranged.speed - 0.45, // loft the shot
-            dmg: t.ranged.dmg,
-          });
-          playSfx('spit');
-        }
-      }
       c.vx = c.dir * t.speed;
       c.vy += 0.12;
       if (c.vy > 1.6) c.vy = 1.6;
@@ -262,18 +327,21 @@ function updateEnemyProjectiles() {
           ep.x >= player.x - 0.5 && ep.x <= player.x + player.w + 0.5 &&
           ep.y >= player.y - 0.5 && ep.y <= player.y + player.h + 0.5) {
         if (player.hurtCd <= 0) {
-          player.hp -= ep.dmg * runState.mult.acidDmg;
+          player.hp -= ep.dmg * (ep.kind === 'elec' ? 1 : runState.mult.acidDmg);
           player.hurtCd = 45;
           playSfx('hurt');
           if (player.hp <= 0) { player.hp = 0; player.alive = false; }
         }
-        splash(cx, cy, 1, E.ACID);
+        if (ep.kind === 'elec') electrify(cx, cy, 2);
+        else splash(cx, cy, 1, E.ACID);
         dead = true;
         break;
       }
       const id = grid[idx(cx, cy)];
       if (id !== E.EMPTY && id !== E.FIRE && TYPE[id] !== T.GAS) {
-        splash(cx, cy, 1, E.ACID); // glob bursts into real acid
+        // glob bursts into its element
+        if (ep.kind === 'elec') electrify(cx, cy, 2);
+        else splash(cx, cy, 1, E.ACID);
         dead = true;
       }
     }

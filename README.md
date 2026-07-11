@@ -56,6 +56,28 @@ to plain water.
 climbable like vines (fuel-free); pushing through only gradually tramples
 them.
 
+## Ecosystems (20 elements)
+
+Stability comes from **cycles with negative feedback**, not one-way
+conversions — every terminal sink got a return path:
+
+- **Nutrient loop**: fire leaves **Ash** (20%); ash + water fertilizes into
+  new plants. Burned forests regrow.
+- **Reproduction loop**: plants drop **Seeds** — lighter than water, so they
+  float and drift to new shores; they germinate on contact with water and
+  rot back to ash if they never find any (no immortal seed piles).
+- **Grazing loop**: the **Bug** is a cellular grazer — eats plants, breeds
+  when well-fed with a crowding limit (populations self-regulate; verified:
+  a paradise of 6,700 plants peaked at ~200 bugs), starves back into ash,
+  drowns, burns. Plants → bugs → ash → plants.
+- **Water cycle**: steam condensation raised to 80% (it was the big leak),
+  and burning vegetation releases steam — forest fires seed their own rain.
+
+Verified headlessly: a sealed terrarium (pond + meadow + seeds + grazers)
+runs 8,000 steps with plants oscillating in a healthy band, and a torched
+forest doubles back past its post-burn population. Overgrown Vault and
+Stone Caverns worldgen now seeds ambient bug fauna.
+
 ## World generation (step 1 — done)
 
 `generateWorld(seed)` builds a level in ~0.5s:
@@ -229,11 +251,58 @@ active slot, dimmed icons when mana is short, click or 1–5 to select.
 6. ~~**Win condition + meta-progression**~~ — done.
 7. ~~**Creatures**~~ — done, with biome spawn tables and a ranged type.
 
+## Weather (done)
+
+Ambient surface weather cycles between long clear spells and 15-30s events:
+**rain** (water falls from the sky row — replenishes maps that lock water
+into biomass), **cold snaps** (drag the whole map's temperature down: rain
+turns to snow as the cold bites, pools freeze over, then it all thaws),
+and **storms** (rain + real lightning: ELEC bolts that electrify pools and
+torch trees). What falls is decided per column by the sky temperature — snow
+over ice biomes even in plain rain. Exposed water surfaces also evaporate
+(faster when warm), closing the map-scale water cycle. HUD shows the current
+weather next to the biome.
+
+## Temperature (done)
+
+A coarse field (one cell per 4×4 sim cells, updated every 4th step) drives
+climate: biome ambients set the baseline (Ice Caves −12°, Volcanic Depths
+55°), elements emit into it (fire/lava heat, ice/snow chill gently), and it
+diffuses + relaxes back. Phase changes read it:
+
+- water **freezes** from exposed surfaces down below 0°
+- snow keeps forever in the cold, melts in warmth; ice thaws above 20°
+  (hysteresis vs freezing-at-0 is deliberate — sandbox ice keeps at 15°)
+- **radiant heat**: lava melts ice without touching it
+- lone lava drips **skin over into stone** in deep cold
+- steam condenses instantly in freezing air; evaporation scales with warmth
+
+The HUD shows the temperature under the cursor next to the biome name.
+
+## Bosses (done)
+
+Depths 3 and 6 are **guardian levels**: no shards — the portal opens when
+the boss dies (HP bar top-center, +30 hp and full mana on the kill).
+- **Magma Worm** (D3): tunnels through terrain straight at you, trails
+  lava, immune to fire — but sizzles hard in water. Kite it through lakes.
+- **Tempest** (D6): storm elemental that hurls arcing electric globs and
+  electrifies water around itself. Don't fight it wet.
+
+## Industry elements (done)
+
+- **Metal**: conducts — sparks skitter along its surface and discharge into
+  whatever's at the far end. Wire a lake. Corrodes in acid.
+- **Glass**: lava fuses sand into it; acid-proof, blast-brittle.
+- **Hydrogen**: electrolysis (sustained charge in water) bubbles it off; it
+  rises, pools at ceilings, and flash-burns violently on any spark.
+- **Snow** (weather) and **Hunter** (predator bug: eats grazers, solitary,
+  starves to ash — the second trophic level; worldgen seeds a few).
+
 ### Open ideas
-- Elite/boss level events; per-biome hazard set-pieces.
-- Input recording for shareable deterministic replays.
+- Input recording for shareable deterministic replays; daily seed runs.
 - Chunked scrolling worlds (bigger than one screen) with sim sleeping.
-- More elements (glass from lava+sand, poison, slime), more creatures.
+- Player heat/cold status effects (freezing water saps hp, heat haze).
+- More biome set-pieces; fungus/fish/pollinator fauna; spell triggers.
 
 ## Performance notes
 

@@ -33,6 +33,66 @@ const updated = new Uint8Array(CELLS);   // frame-parity flag (no double moves)
 let simClock = 0;   // flips 0/1 each step
 let simFrame = 0;
 
+// --- temperature field ------------------------------------------------------
+// A coarse grid (one cell per 4x4 sim cells) of degrees-C-ish values.
+// Three drivers: biome ambient baselines (set by worldgen), heat/cold emitted
+// by elements (fire, lava, ice, snow), and diffusion between cells. Phase
+// changes read it: water freezes below 0, snow/ice melt when warm, lava skins
+// to stone in deep cold, evaporation scales with warmth, and weather picks
+// rain vs snow per column from the sky temperature.
+
+const TEMP_W = SIM_W >> 2;
+const TEMP_H = SIM_H >> 2;
+const TEMP_CELLS = TEMP_W * TEMP_H;
+const TEMP_DEFAULT = 15;
+
+const temp        = new Float32Array(TEMP_CELLS).fill(TEMP_DEFAULT);
+const ambientTemp = new Float32Array(TEMP_CELLS).fill(TEMP_DEFAULT);
+const _tempPrev   = new Float32Array(TEMP_CELLS);
+let ambientChill = 0; // global offset, driven by weather (cold snaps)
+
+// per-element heat emission into the local temp cell, per temp update
+const HEAT = new Float32Array(NUM_ELEMENTS);
+HEAT[E.FIRE]  =  1.4;
+HEAT[E.LAVA]  =  2.2;
+HEAT[E.STEAM] =  0.25;
+HEAT[E.ELEC]  =  0.3;
+// cold emission is much gentler than heat: a solid ice block chills its own
+// air toward freezing, but can't out-refrigerate a lava pool one cell over
+HEAT[E.ICE]   = -0.15;
+HEAT[E.SNOW]  = -0.1;
+
+function tempAt(x, y) { return temp[(y >> 2) * TEMP_W + (x >> 2)]; }
+
+// Runs every 4th sim step (deterministic — pure arithmetic, no rand).
+function updateTemperature() {
+  // 1. emission: hot/cold elements push their temp cell
+  for (let y = 0; y < SIM_H; y++) {
+    const row = y * SIM_W, trow = (y >> 2) * TEMP_W;
+    for (let x = 0; x < SIM_W; x++) {
+      const h = HEAT[grid[row + x]];
+      if (h !== 0) temp[trow + (x >> 2)] += h;
+    }
+  }
+  // 2. diffusion + relaxation toward the biome ambient (plus weather chill)
+  _tempPrev.set(temp);
+  for (let ty = 0; ty < TEMP_H; ty++) {
+    const trow = ty * TEMP_W;
+    for (let tx = 0; tx < TEMP_W; tx++) {
+      const i = trow + tx;
+      const s = _tempPrev[i];
+      let sum = 0, n = 0;
+      if (tx > 0)          { sum += _tempPrev[i - 1];      n++; }
+      if (tx + 1 < TEMP_W) { sum += _tempPrev[i + 1];      n++; }
+      if (ty > 0)          { sum += _tempPrev[i - TEMP_W]; n++; }
+      if (ty + 1 < TEMP_H) { sum += _tempPrev[i + TEMP_W]; n++; }
+      let t = s + (sum / n - s) * 0.15 + (ambientTemp[i] + ambientChill - s) * 0.04;
+      if (t < -50) t = -50; else if (t > 150) t = 150;
+      temp[i] = t;
+    }
+  }
+}
+
 // While true (during world generation), only movement runs — no reactions,
 // ignition, or gas decay — so liquids/powders settle without side effects.
 let worldSettling = false;
@@ -74,6 +134,11 @@ function canDisplace(density, j) {
 function stepPowder(i, x, y, id) {
   // seeds that never find water eventually rot into ash
   if (id === E.SEED && rand() < 0.0004) { setCell(i, E.ASH); return; }
+  // snow melts when the air is warm — and keeps forever in the cold
+  if (id === E.SNOW && !worldSettling) {
+    const ct = tempAt(x, y);
+    if (ct > 0 && rand() < ct * 0.00003) { setCell(i, E.WATER); return; }
+  }
   const d = DENSITY[id];
   if (y + 1 < SIM_H) {
     const below = i + SIM_W;
@@ -98,6 +163,29 @@ function stepLiquid(i, x, y, id) {
   // transient liquids: electrified water relaxes back to plain water
   if (life[i] > 0 && --life[i] === 0) {
     setCell(i, id === E.EWATER ? E.WATER : E.EMPTY);
+    return;
+  }
+  if (id === E.WATER && !worldSettling && y > 0) {
+    const ct = tempAt(x, y);
+    // freeze from exposed surfaces downward in cold regions
+    if (ct < 0) {
+      const up = grid[i - SIM_W];
+      if ((up === E.EMPTY || up === E.ICE || up === E.SNOW) &&
+          rand() < Math.min(0.05, -ct * 0.002)) {
+        setCell(i, E.ICE);
+        return;
+      }
+    }
+    // exposed surfaces evaporate, faster the warmer it is (~old flat rate at
+    // temperate ambient; the steam mostly condenses back, closing the cycle)
+    else if (grid[i - SIM_W] === E.EMPTY && rand() < ct * 0.00001) {
+      setCell(i, E.STEAM);
+      return;
+    }
+  }
+  // lava exposed to deep cold skins over into stone
+  if (id === E.LAVA && !worldSettling && tempAt(x, y) < 5 && rand() < 0.008) {
+    setCell(i, E.STONE);
     return;
   }
   // live water conducts a DECAYING charge into neighboring water — each hop
@@ -145,12 +233,58 @@ function stepLiquid(i, x, y, id) {
 }
 
 function stepGas(i, x, y, id) {
+  // steam hitting cold air condenses immediately (fog over ice caves)
+  if (id === E.STEAM && !worldSettling && tempAt(x, y) < 0 && rand() < 0.03) {
+    setCell(i, E.WATER);
+    return;
+  }
   // lifetime
   if (life[i] > 0 && --life[i] === 0) {
     // steam mostly condenses back to water (a tight water cycle keeps
     // ecosystems from slowly draining dry); smoke just fades
     setCell(i, id === E.STEAM && rand() < 0.8 ? E.WATER : E.EMPTY);
     return;
+  }
+  if (id === E.ELEC) {
+    // discharge into any adjacent water — a spark never drifts away from a
+    // pool it touches (the reaction table alone gives it only a one-frame,
+    // chance-of-a-pick window before the gas rises out of contact)
+    for (let n = 0; n < 4; n++) {
+      let j = -1;
+      if (n === 0 && y > 0) j = i - SIM_W;
+      else if (n === 1 && y + 1 < SIM_H) j = i + SIM_W;
+      else if (n === 2 && x > 0) j = i - 1;
+      else if (n === 3 && x + 1 < SIM_W) j = i + 1;
+      if (j >= 0 && grid[j] === E.WATER) {
+        setCell(j, E.EWATER);
+        setCell(i, E.EMPTY);
+        return;
+      }
+    }
+  }
+  // electric sparks skitter along metal surfaces (conduction): hop to an
+  // open cell adjacent to a neighboring metal cell, recharging a little
+  if (id === E.ELEC) {
+    for (let n = 0; n < 4; n++) {
+      let j = -1;
+      if (n === 0 && y > 0) j = i - SIM_W;
+      else if (n === 1 && y + 1 < SIM_H) j = i + SIM_W;
+      else if (n === 2 && x > 0) j = i - 1;
+      else if (n === 3 && x + 1 < SIM_W) j = i + 1;
+      if (j < 0 || grid[j] !== E.METAL) continue;
+      const jx = j % SIM_W, jy = (j / SIM_W) | 0;
+      const hops = [];
+      if (jy > 0) hops.push(j - SIM_W);
+      if (jy + 1 < SIM_H) hops.push(j + SIM_W);
+      if (jx > 0) hops.push(j - 1);
+      if (jx + 1 < SIM_W) hops.push(j + 1);
+      const m = hops[(rand() * hops.length) | 0];
+      if (m !== i && grid[m] === E.EMPTY) {
+        swapCells(i, m);
+        life[m] = Math.min(30, life[m] + 4);
+        return;
+      }
+    }
   }
   const d = DENSITY[id];
   const r = rand();
@@ -163,6 +297,12 @@ function stepGas(i, x, y, id) {
       return;
     }
     if (canDisplace(d + 1, above)) { swapCells(i, above); return; }
+    // bubble up through liquids (steam out of a boiling lake,
+    // hydrogen out of an electrolyzing pool)
+    if (TYPE[grid[above]] === T.LIQUID && rand() < 0.4) {
+      swapCells(i, above);
+      return;
+    }
   }
   // sideways wander
   const dir = rand() < 0.5 ? 1 : -1;
@@ -194,38 +334,46 @@ function stepFire(i, x, y, id) {
   }
 }
 
-// Cellular grazer: eats plants, breeds when well-fed (crowding-limited so
-// populations self-regulate), starves back into ash — closing the nutrient
-// loop: plants -> bugs -> ash -> (with water) plants.
-function stepBug(i, x, y) {
+// Cellular fauna: grazers (BUG) eat plants, hunters (PRED) eat grazers.
+// Both breed when well-fed (crowding-limited so populations self-regulate)
+// and starve back into ash — a two-level trophic chain over the nutrient
+// loop: plants -> bugs -> hunters -> ash -> (with water) plants.
+function stepBug(i, x, y, id) {
   if (life[i] === 0) { setCell(i, E.ASH); return; } // starved
   life[i]--;
+
+  const hunter = id === E.PRED;
+  const prey    = hunter ? E.BUG : E.PLANT;
+  const eatGain = hunter ? 150 : 90;
+  const breedAt = hunter ? 380 : 300;
+  const crowdAt = hunter ? 1 : 2; // hunters are solitary
+  const breedP  = hunter ? 0.012 : 0.02;
 
   const below = y + 1 < SIM_H ? i + SIM_W : -1;
   const above = y > 0 ? i - SIM_W : -1;
   const left  = x > 0 ? i - 1 : -1;
   const right = x + 1 < SIM_W ? i + 1 : -1;
 
-  // graze: eating takes the turn
+  // feed: eating takes the turn
   for (const j of [below, left, right, above]) {
-    if (j >= 0 && grid[j] === E.PLANT && rand() < 0.25) {
+    if (j >= 0 && grid[j] === prey && rand() < 0.25) {
       setCell(j, E.EMPTY);
-      life[i] = Math.min(600, life[i] + 90);
+      life[i] = Math.min(700, life[i] + eatGain);
       return;
     }
   }
 
   // reproduce when well-fed, but never into a crowd
-  if (life[i] > 300 && rand() < 0.02) {
+  if (life[i] > breedAt && rand() < breedP) {
     let neighbors = 0, empty = -1;
     for (const j of [below, above, left, right]) {
       if (j < 0) continue;
-      if (grid[j] === E.BUG) neighbors++;
+      if (grid[j] === id) neighbors++;
       else if (grid[j] === E.EMPTY) empty = j;
     }
-    if (neighbors < 2 && empty >= 0) {
-      setCell(empty, E.BUG);
-      life[i] -= 150;
+    if (neighbors < crowdAt && empty >= 0) {
+      setCell(empty, id);
+      life[i] -= 180;
       return;
     }
   }
@@ -352,6 +500,7 @@ function drainExplosions() {
 function simStep() {
   simClock ^= 1;
   simFrame++;
+  if (!worldSettling && (simFrame & 3) === 0) updateTemperature();
 
   for (let y = SIM_H - 1; y >= 0; y--) {
     // alternate scan direction per row/frame to avoid directional bias
@@ -375,12 +524,19 @@ function simStep() {
           break;
         case T.GAS:    stepGas(i, x, y, id); break;
         case T.FIRE:   stepFire(i, x, y, id); break;
-        case T.BUG:    stepBug(i, x, y); break;
+        case T.BUG:    stepBug(i, x, y, id); break;
         case T.STATIC:
           // plants occasionally drop a seed into open air below
           if (id === E.PLANT && rand() < 0.00012 && y + 1 < SIM_H &&
               grid[i + SIM_W] === E.EMPTY) {
             setCell(i + SIM_W, E.SEED);
+          } else if (id === E.ICE && !worldSettling) {
+            // ice thaws in warm air (threshold above temperate ambient, so
+            // sandbox ice keeps; hysteresis vs freezing-at-0 is deliberate)
+            const ct = tempAt(x, y);
+            if (ct > 20 && rand() < Math.min(0.05, (ct - 20) * 0.001)) {
+              setCell(i, E.WATER);
+            }
           }
           break;
       }
@@ -415,6 +571,8 @@ function clearSim() {
   grid.fill(E.EMPTY);
   shade.fill(0); // so same-seed worlds are byte-identical, not just visually
   life.fill(0);
+  temp.fill(TEMP_DEFAULT);
+  ambientTemp.fill(TEMP_DEFAULT);
 }
 
 // A little starter scene so the first impression isn't a blank void

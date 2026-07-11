@@ -6,7 +6,8 @@
 const PALETTE = [
   E.SAND, E.WATER, E.OIL, E.WOOD, E.PLANT, E.FIRE,
   E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC,
-  E.SEED, E.ASH, E.BUG, E.STONE, E.WALL,
+  E.SEED, E.ASH, E.BUG, E.PRED, E.SNOW,
+  E.METAL, E.GLASS, E.HYDROGEN, E.STONE, E.WALL,
 ];
 
 let paused = false;
@@ -178,6 +179,7 @@ function main() {
       applyInput();          // painting/casting tick at sim rate, even paused
       if (!paused && !run.choosing) {
         simStep();
+        updateWeather();
         if (playMode) {
           updatePlayer();
           updateCreatures();
@@ -192,13 +194,14 @@ function main() {
     if (playMode) drawCreatures();
     if (playMode) drawProjectiles();
     if (playMode && player.alive) drawPlayer();
+    if (playMode) drawBossBar();
     if (playMode) {
       hpFill.style.width = (player.hp / player.maxHp * 100) + '%';
       manaFill.style.width = (wand.mana / wand.maxMana * 100) + '%';
       fuelFill.style.width = (player.fuel / player.maxFuel * 100) + '%';
       updateHotbar();
       hudStatus.textContent = !player.alive ? 'DEAD — R to respawn'
-        : run.portalHint ? 'dormant — collect ◆'
+        : run.portalHint ? (bossAlive() ? 'dormant — slay the guardian' : 'dormant — collect ◆')
         : player.burning > 0 ? 'BURNING'
         : player.inLiquid ? 'swimming' : '';
     }
@@ -207,7 +210,11 @@ function main() {
     if (now - lastFpsTime >= 500) {
       hudFps.textContent = Math.round(frames * 1000 / (now - lastFpsTime));
       hudCells.textContent = count;
-      hudBiome.textContent = biomeNameAt(input.curX, input.curY) || '–';
+      const tx = Math.max(0, Math.min(SIM_W - 1, input.curX | 0));
+      const ty = Math.max(0, Math.min(SIM_H - 1, input.curY | 0));
+      hudBiome.textContent = (biomeNameAt(input.curX, input.curY) || '–') +
+        ' · ' + Math.round(tempAt(tx, ty)) + '°' +
+        (weather.mode !== 'clear' ? ' · ' + weather.mode : '');
       frames = 0;
       lastFpsTime = now;
     }
