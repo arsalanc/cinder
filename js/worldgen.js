@@ -73,9 +73,9 @@ function fbm(noise, x, y, octaves) {
 // (0 = just below the surface, 1 = bottom of the map)
 
 const BIOMES = [
-  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, depth: [0, 1] },
+  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, depth: [0, 1] },
   { name: 'Overgrown Vault', base: E.STONE, vein: E.WOOD,      veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.40, deco: E.PLANT, decoAmount: 0.85,
-    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, depth: [0, 0.6] },
+    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, depth: [0, 0.6] },
   { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    depth: [0, 0.7] },
   { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    depth: [0.3, 1],  hazardous: true },
   { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    depth: [0.55, 1], hazardous: true },
@@ -257,10 +257,17 @@ function generateWorld(seedStr, runDepth = 0) {
       const i = idx(x, y);
       if (y <= surf[x] || grid[i] !== E.EMPTY) continue;
       const biome = BIOMES[worldBiomeMap[i]];
-      if (!biome.deco) continue;
+      if (!biome.deco && !biome.fauna) continue;
       const ceiling = isGrowBase(grid[i - SIM_W]);
       const floor = isGrowBase(grid[i + SIM_W]);
       const wall = isGrowBase(grid[i - 1]) || isGrowBase(grid[i + 1]);
+
+      // ambient fauna: grazing bugs on cave floors
+      if (biome.fauna && floor && rng() < biome.fauna) {
+        setCell(i, E.BUG);
+        continue;
+      }
+      if (!biome.deco) continue;
 
       // vines trail down from ceilings
       if (ceiling && biome.vineChance && rng() < biome.vineChance) {

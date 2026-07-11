@@ -25,6 +25,9 @@ const E = {
   ICE: 14,
   ELEC: 15,    // transient electric spark
   EWATER: 16,  // electrified ("live") water — conducts, shocks, decays back
+  SEED: 17,    // dropped by plants; floats on water, germinates near it
+  ASH: 18,     // what fire leaves behind; fertilizes water into plants
+  BUG: 19,     // cellular grazer: eats plants, breeds, starves back to ash
 };
 
 // Movement archetypes
@@ -33,7 +36,8 @@ const T = {
   POWDER: 1,   // falls, piles up (sand)
   LIQUID: 2,   // falls, spreads horizontally
   GAS: 3,      // rises, wanders, dissipates
-  FIRE: 4,     // special: flickers up, ignites, dies to smoke
+  FIRE: 4,     // special: flickers up, ignites, dies to smoke/ash
+  BUG: 5,      // special: crawls, grazes plants, reproduces, starves
 };
 
 const DEFS = {
@@ -63,9 +67,16 @@ const DEFS = {
                    lifeMin: 6, lifeMax: 16 },
   [E.EWATER]:    { name: 'Live Water', type: T.LIQUID, color: [70, 190, 255], colorVar: 14, density: 30, dispersion: 5,
                    lifeMin: 40, lifeMax: 70 },
+  // density 25 < water's 30: seeds float and drift to new shores
+  [E.SEED]:      { name: 'Seed',      type: T.POWDER, color: [196, 204, 116], colorVar: 20, density: 25,
+                   flammability: 0.25, burnLife: 30, dissolvable: true },
+  [E.ASH]:       { name: 'Ash',       type: T.POWDER, color: [108, 102, 96],  colorVar: 16, density: 40,
+                   dissolvable: true },
+  [E.BUG]:       { name: 'Bug',       type: T.BUG,    color: [128, 54, 42],   colorVar: 24, density: 45,
+                   flammability: 0.3, burnLife: 40, lifeMin: 240, lifeMax: 320, dissolvable: true },
 };
 
-const NUM_ELEMENTS = 17;
+const NUM_ELEMENTS = 20;
 
 // Flat typed lookups for the hot sim loop
 const TYPE        = new Uint8Array(NUM_ELEMENTS);
@@ -138,3 +149,13 @@ addReaction(E.ACID, E.WATER, E.WATER, E.WATER, 0.01); // water dilutes acid
 addReaction(E.WATER, E.ELEC, E.EWATER, E.EMPTY, 1.0);
 addReaction(E.ELEC, E.WATER, E.EMPTY, E.EWATER, 1.0);
 addReaction(E.OIL, E.ELEC, E.FIRE, E.EMPTY, 0.4);
+
+// --- ecosystem cycles -------------------------------------------------------
+// Seeds germinate on contact with water (consuming it: water becomes biomass)
+addReaction(E.SEED, E.WATER, E.PLANT, E.EMPTY, 0.01);
+addReaction(E.WATER, E.SEED, E.EMPTY, E.PLANT, 0.01);
+// Ash fertilizes: burned forests + rain -> regrowth
+addReaction(E.ASH, E.WATER, E.PLANT, E.EMPTY, 0.004);
+addReaction(E.WATER, E.ASH, E.EMPTY, E.PLANT, 0.004);
+// Burning vegetation releases its moisture as steam (fires seed rain)
+addReaction(E.PLANT, E.FIRE, E.STEAM, E.FIRE, 0.04);

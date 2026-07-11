@@ -5,7 +5,8 @@
 // Elements shown in the palette, in order (1-9 keyboard shortcuts follow this)
 const PALETTE = [
   E.SAND, E.WATER, E.OIL, E.WOOD, E.PLANT, E.FIRE,
-  E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC, E.STONE, E.WALL,
+  E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC,
+  E.SEED, E.ASH, E.BUG, E.STONE, E.WALL,
 ];
 
 let paused = false;

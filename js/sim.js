@@ -72,6 +72,8 @@ function canDisplace(density, j) {
 // --- movement archetypes -------------------------------------------------
 
 function stepPowder(i, x, y, id) {
+  // seeds that never find water eventually rot into ash
+  if (id === E.SEED && rand() < 0.0004) { setCell(i, E.ASH); return; }
   const d = DENSITY[id];
   if (y + 1 < SIM_H) {
     const below = i + SIM_W;
@@ -145,8 +147,9 @@ function stepLiquid(i, x, y, id) {
 function stepGas(i, x, y, id) {
   // lifetime
   if (life[i] > 0 && --life[i] === 0) {
-    // steam sometimes condenses; smoke just fades
-    setCell(i, id === E.STEAM && rand() < 0.3 ? E.WATER : E.EMPTY);
+    // steam mostly condenses back to water (a tight water cycle keeps
+    // ecosystems from slowly draining dry); smoke just fades
+    setCell(i, id === E.STEAM && rand() < 0.8 ? E.WATER : E.EMPTY);
     return;
   }
   const d = DENSITY[id];
@@ -171,7 +174,9 @@ function stepGas(i, x, y, id) {
 
 function stepFire(i, x, y, id) {
   if (life[i] > 0 && --life[i] === 0) {
-    setCell(i, rand() < 0.4 ? E.SMOKE : E.EMPTY);
+    // fire leaves smoke, ash (falls and fertilizes), or nothing
+    const r = rand();
+    setCell(i, r < 0.25 ? E.SMOKE : r < 0.45 ? E.ASH : E.EMPTY);
     return;
   }
   const hasFuel = igniteNeighbors(i, x, y);
@@ -187,6 +192,62 @@ function stepFire(i, x, y, id) {
       swapCells(i, i - SIM_W + dx);
     }
   }
+}
+
+// Cellular grazer: eats plants, breeds when well-fed (crowding-limited so
+// populations self-regulate), starves back into ash — closing the nutrient
+// loop: plants -> bugs -> ash -> (with water) plants.
+function stepBug(i, x, y) {
+  if (life[i] === 0) { setCell(i, E.ASH); return; } // starved
+  life[i]--;
+
+  const below = y + 1 < SIM_H ? i + SIM_W : -1;
+  const above = y > 0 ? i - SIM_W : -1;
+  const left  = x > 0 ? i - 1 : -1;
+  const right = x + 1 < SIM_W ? i + 1 : -1;
+
+  // graze: eating takes the turn
+  for (const j of [below, left, right, above]) {
+    if (j >= 0 && grid[j] === E.PLANT && rand() < 0.25) {
+      setCell(j, E.EMPTY);
+      life[i] = Math.min(600, life[i] + 90);
+      return;
+    }
+  }
+
+  // reproduce when well-fed, but never into a crowd
+  if (life[i] > 300 && rand() < 0.02) {
+    let neighbors = 0, empty = -1;
+    for (const j of [below, above, left, right]) {
+      if (j < 0) continue;
+      if (grid[j] === E.BUG) neighbors++;
+      else if (grid[j] === E.EMPTY) empty = j;
+    }
+    if (neighbors < 2 && empty >= 0) {
+      setCell(empty, E.BUG);
+      life[i] -= 150;
+      return;
+    }
+  }
+
+  // gravity; bugs sink in liquid and can drown
+  if (below >= 0) {
+    if (grid[below] === E.EMPTY) { swapCells(i, below); return; }
+    if (TYPE[grid[below]] === T.LIQUID && rand() < 0.3) {
+      swapCells(i, below);
+      if (rand() < 0.012) setCell(below, E.ASH); // glub
+      return;
+    }
+  }
+  if (above >= 0 && TYPE[grid[above]] === T.LIQUID && rand() < 0.02) {
+    setCell(i, E.ASH); // fully submerged
+    return;
+  }
+
+  // wander, with the occasional clamber upward
+  const side = rand() < 0.5 ? left : right;
+  if (side >= 0 && grid[side] === E.EMPTY && rand() < 0.5) { swapCells(i, side); return; }
+  if (above >= 0 && grid[above] === E.EMPTY && rand() < 0.08) swapCells(i, above);
 }
 
 // Fire and lava share this: try to ignite the 4 cardinal neighbors.
@@ -314,7 +375,14 @@ function simStep() {
           break;
         case T.GAS:    stepGas(i, x, y, id); break;
         case T.FIRE:   stepFire(i, x, y, id); break;
-        // STATIC: does not move; reactions above still apply
+        case T.BUG:    stepBug(i, x, y); break;
+        case T.STATIC:
+          // plants occasionally drop a seed into open air below
+          if (id === E.PLANT && rand() < 0.00012 && y + 1 < SIM_H &&
+              grid[i + SIM_W] === E.EMPTY) {
+            setCell(i + SIM_W, E.SEED);
+          }
+          break;
       }
     }
   }
