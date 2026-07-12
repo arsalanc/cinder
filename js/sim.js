@@ -421,10 +421,19 @@ function stepBug(i, x, y, id) {
   const left  = x > 0 ? i - 1 : -1;
   const right = x + 1 < SIM_W ? i + 1 : -1;
 
-  // feed: eating takes the turn (grazers also browse fungus — the decomposer
-  // route feeds dead wood back into the food web)
+  // smoke chokes: caught under the ceiling layer of a fire, life drains fast
+  // — and a coughing fit takes the turn (no feeding or breeding mid-choke)
+  if (above >= 0 && grid[above] === E.SMOKE) {
+    if (rand() < 0.12) life[i] = life[i] > 30 ? life[i] - 30 : 0;
+    if (rand() < 0.5) return;
+  }
+
+  // feed: eating takes the turn (grazers also browse fungus and seeds — the
+  // decomposer route and the seed bank both feed back into the food web)
   for (const j of [below, left, right, above]) {
-    if (j >= 0 && (grid[j] === prey || (!hunter && grid[j] === E.FUNGUS)) &&
+    if (j >= 0 &&
+        (grid[j] === prey ||
+         (!hunter && (grid[j] === E.FUNGUS || grid[j] === E.SEED))) &&
         rand() < 0.25) {
       setCell(j, E.EMPTY);
       life[i] = Math.min(700, life[i] + eatGain);
@@ -556,16 +565,51 @@ function stepMoth(i, x, y, id) {
     setCell(i, E.ASH); // submerged
     return;
   }
+  // smoke chokes moths even faster than bugs (delicate little things)
+  if (above >= 0 && grid[above] === E.SMOKE && rand() < 0.15) {
+    life[i] = life[i] > 40 ? life[i] - 40 : 0;
+  }
+
+  // like a moth to a flame: scan short rays for visible fire and fly toward
+  // it (through smoke, not through walls) — usually to its doom
+  if (rand() < 0.6) {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1], [0, 1]]) {
+      for (let d = 2; d <= 5; d++) {
+        const fx = x + dx * d, fy = y + dy * d;
+        if (fx < 0 || fx >= SIM_W || fy < 0 || fy >= SIM_H) break;
+        const g = grid[fy * SIM_W + fx];
+        if (g === E.FIRE) {
+          const j = (y + dy) * SIM_W + (x + dx);
+          if (grid[j] === E.EMPTY) swapCells(i, j);
+          return;
+        }
+        if (g !== E.EMPTY && g !== E.SMOKE) break; // sight blocked
+      }
+    }
+  }
 
   let onFlower = false;
   for (const j of dirs) {
-    if (j >= 0 && grid[j] === E.PLANT) {
+    if (j < 0) continue;
+    const g = grid[j];
+    if (g === E.PLANT || g === E.FUNGUS) {
       onFlower = true;
       if (rand() < 0.15) life[i] = Math.min(900, life[i] + 50);
-      // pollination: carry a seed off into the open air
-      if (rand() < 0.004) {
+      // pollination: carry seeds off meadows — or fungal spores off groves
+      // (spores only take on supported cells: no fungus hanging in the sky)
+      const spore = g === E.FUNGUS;
+      if (rand() < (spore ? 0.002 : 0.004)) {
         for (const k of dirs) {
-          if (k >= 0 && grid[k] === E.EMPTY) { setCell(k, E.SEED); break; }
+          if (k < 0 || grid[k] !== E.EMPTY) continue;
+          if (spore) {
+            const under = k + SIM_W;
+            if (under >= CELLS || grid[under] === E.EMPTY ||
+                TYPE[grid[under]] === T.GAS || TYPE[grid[under]] === T.LIQUID) continue;
+            setCell(k, E.FUNGUS);
+          } else {
+            setCell(k, E.SEED);
+          }
+          break;
         }
       }
       break;

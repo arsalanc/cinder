@@ -122,6 +122,7 @@ function updatePlayer() {
       else if (id === E.ACID) dmg += 0.5 * m.acidDmg;
       else if (id === E.ELEC) dmg += 1.2;
       else if (id === E.EWATER) dmg += 0.7;
+      else if (id === E.SMOKE) dmg += 0.015; // choking — mild, but adds up
       const heal = runState.heals[id];
       if (heal) player.hp = Math.min(player.maxHp, player.hp + heal);
     }

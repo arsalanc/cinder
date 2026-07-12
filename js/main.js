@@ -8,7 +8,7 @@ const PALETTE = [
   E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC,
   E.SEED, E.ASH, E.BUG, E.PRED, E.SNOW,
   E.METAL, E.GLASS, E.HYDROGEN, E.FUNGUS, E.FISH,
-  E.MOTH, E.STONE, E.WALL, E.EMPTY,
+  E.MOTH, E.STONE, E.WALL, TOOL_LIGHTNING, E.EMPTY,
 ];
 
 let paused = false;
@@ -74,6 +74,24 @@ function updateHUD() {
   hudBrush.textContent = input.brush + (eff !== input.brush ? ` → ${eff}` : '');
 }
 
+// Same seed every day, worldwide: compare runs on equal footing
+function startDailyRun() {
+  const d = new Date();
+  pendingRunSeed = 'daily-' + d.getUTCFullYear() + '-' +
+    String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getUTCDate()).padStart(2, '0');
+  stopReplay();
+  if (playMode) { startRun(); updateSpellHUD(); } else togglePlayMode();
+}
+
+function watchReplay() {
+  const data = loadSavedReplay();
+  if (!data) return; // nothing recorded yet
+  replayArm(data);
+  pendingRunSeed = data.seed;
+  if (playMode) { startRun(); updateSpellHUD(); } else togglePlayMode();
+}
+
 function updateWeatherUI() {
   document.querySelectorAll('#weather-seg button').forEach(btn => {
     btn.classList.toggle('on', btn.dataset.w === weather.override);
@@ -95,11 +113,15 @@ function cssColor(id) {
 function buildPalette() {
   const box = document.getElementById('palette');
   PALETTE.forEach((id, n) => {
+    const tool = id === TOOL_LIGHTNING;
+    const name = tool ? 'Lightning' : DEFS[id].name;
+    const color = tool ? 'rgb(255,250,190)' : cssColor(id);
     const btn = document.createElement('button');
     btn.dataset.id = id;
-    btn.title = DEFS[id].name + (n < 9 ? ` (${n + 1})` : '');
-    btn.innerHTML = `<span class="swatch" style="background:${cssColor(id)}"></span>` +
-                    `<span class="pname">${DEFS[id].name}</span>`;
+    btn.title = tool ? 'Lightning (strikes at the cursor)'
+                     : name + (n < 9 ? ` (${n + 1})` : '');
+    btn.innerHTML = `<span class="swatch" style="background:${color}"></span>` +
+                    `<span class="pname">${name}</span>`;
     btn.addEventListener('click', () => selectElement(id));
     box.appendChild(btn);
   });
@@ -182,6 +204,8 @@ function main() {
       updateWeatherUI();
     });
   });
+  document.getElementById('btn-daily').addEventListener('click', startDailyRun);
+  document.getElementById('btn-replay').addEventListener('click', watchReplay);
   seedInput.addEventListener('keydown', e => {
     e.stopPropagation(); // don't trigger sim shortcuts while typing a seed
     if (e.key === 'Enter') { doGenerate(); seedInput.blur(); }
@@ -205,6 +229,7 @@ function main() {
 
     while (simAccum >= SIM_DT) {
       simAccum -= SIM_DT;
+      if (!paused) replayStep(); // playback overwrites inputs / picks synergies
       applyInput();          // painting/casting tick at sim rate, even paused
       if (!paused && !run.choosing) {
         simStep();
@@ -214,6 +239,7 @@ function main() {
           updateCreatures();
           updateSpells();
           updateGame();
+          recordFrame();     // replay recording: one input word per sim step
         }
       }
     }
@@ -229,10 +255,11 @@ function main() {
       manaFill.style.width = (wand.mana / wand.maxMana * 100) + '%';
       fuelFill.style.width = (player.fuel / player.maxFuel * 100) + '%';
       updateHotbar();
-      hudStatus.textContent = !player.alive ? 'DEAD — R to respawn'
+      hudStatus.textContent = (replayPlay.active ? '▶ replay · ' : '') +
+        (!player.alive ? 'DEAD — R to respawn'
         : run.portalHint ? (bossAlive() ? 'dormant — slay the guardian' : 'dormant — collect ◆')
         : player.burning > 0 ? 'BURNING'
-        : player.inLiquid ? 'swimming' : '';
+        : player.inLiquid ? 'swimming' : '');
     }
 
     frames++;

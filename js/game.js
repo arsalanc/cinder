@@ -50,6 +50,8 @@ function isUnlocked(mod) {
 
 // Record end-of-run stats; returns names of modifiers this run just unlocked
 function finishRun(won) {
+  // replays are re-enactments: they never touch meta-progression
+  if (typeof replayPlay !== 'undefined' && replayPlay.active) return [];
   const before = new Set(MODIFIERS.filter(isUnlocked).map(m => m.name));
   meta.runs++;
   meta.bestDepth = Math.max(meta.bestDepth, run.depth);
@@ -57,6 +59,9 @@ function finishRun(won) {
   saveMeta();
   return MODIFIERS.filter(isUnlocked).map(m => m.name).filter(n => !before.has(n));
 }
+
+// Replays and daily runs inject their seed here before calling startRun
+let pendingRunSeed = null;
 
 function startRun() {
   resetModifiers();
@@ -69,8 +74,11 @@ function startRun() {
   run.won = false;
   run.kills = 0;
   // Math.random on purpose: fresh entropy for each run; everything after
-  // this seed is deterministic via the sim PRNG
-  run.seed = Math.random().toString(36).slice(2, 8);
+  // this seed is deterministic via the sim PRNG (which is why a seed plus
+  // recorded inputs replays the entire run)
+  run.seed = pendingRunSeed || Math.random().toString(36).slice(2, 8);
+  pendingRunSeed = null;
+  if (typeof replayBeginRecording === 'function') replayBeginRecording(run.seed);
   beginLevel();
   hideOverlay();
 }
@@ -250,6 +258,7 @@ function updateGame() {
   } else if (!run.dead) {
     run.dead = true;
     const unlocked = finishRun(false);
+    if (typeof replayEndRecording === 'function') replayEndRecording();
     playSfx('death');
     showEndOverlay('You died at depth ' + run.depth, unlocked);
   }
@@ -260,6 +269,7 @@ function levelComplete() {
     run.won = true;
     run.active = false;
     const unlocked = finishRun(true);
+    if (typeof replayEndRecording === 'function') replayEndRecording();
     playSfx('portal');
     showEndOverlay('You escaped the depths — victory!', unlocked);
     return;
@@ -272,6 +282,7 @@ function levelComplete() {
 
 function chooseModifier(mod) {
   playSfx('pick');
+  if (typeof replayNoteMod === 'function') replayNoteMod(mod.name);
   mod.apply();
   run.mods.push(mod.name);
   run.choosing = false;

@@ -77,22 +77,40 @@ function updateWeather() {
   }
 }
 
-function lightningStrike() {
+function lightningStrike() { // storms: a random bolt out of the sky row
   const x = 4 + ((rand() * (SIM_W - 8)) | 0);
-  let y = 1;
+  lightningStrikeAt(x, 1, true);
+}
+
+// The bolt itself: descend from (x, yTop) to the first surface, leave a
+// crackling ELEC column, and hit the ground with the appropriate effect.
+// Also the sandbox Lightning tool (needSky=false allows short cave bolts).
+function lightningStrikeAt(x, yTop, needSky) {
+  let y = yTop;
   while (y < SIM_H - 2 && grid[idx(x, y)] === E.EMPTY) y++;
-  if (y <= 2) return; // struck a rooftop at the very sky row; skip
+  if (needSky && y <= 2) return; // struck a rooftop at the very sky row; skip
+  if (y === yTop) return;        // no air to travel through
   // visible bolt: a brief column of crackling sparks
-  for (let by = 1; by < y; by++) {
+  for (let by = yTop; by < y; by++) {
     const j = idx(x, by);
     if (grid[j] === E.EMPTY) {
       setCell(j, E.ELEC);
       life[j] = 3 + ((rand() * 4) | 0);
     }
   }
-  // ground effect: torch what burns, electrify what conducts
+  // ground effect: sand vitrifies, what burns torches, what conducts charges
   const target = grid[idx(x, y)];
-  if (FLAMMABLE[target] > 0) {
+  if (target === E.SAND) {
+    // fulgurite: the strike fuses a branching glass channel down into the sand
+    let fx = x;
+    for (let fy = y, d = 0; d < 14 && fy < SIM_H - 2; d++, fy++) {
+      if (grid[idx(fx, fy)] !== E.SAND) break;
+      setCell(idx(fx, fy), E.GLASS);
+      if (fx > 2 && rand() < 0.25 && grid[idx(fx - 1, fy)] === E.SAND) setCell(idx(fx - 1, fy), E.GLASS);
+      if (fx < SIM_W - 3 && rand() < 0.25 && grid[idx(fx + 1, fy)] === E.SAND) setCell(idx(fx + 1, fy), E.GLASS);
+      if (rand() < 0.35) fx = Math.max(3, Math.min(SIM_W - 4, fx + (rand() < 0.5 ? -1 : 1)));
+    }
+  } else if (FLAMMABLE[target] > 0) {
     setCell(idx(x, y), E.FIRE);
     life[idx(x, y)] = BURN_LIFE[target];
   } else {

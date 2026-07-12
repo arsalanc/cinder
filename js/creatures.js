@@ -139,7 +139,10 @@ function killCreature(i) {
     if (t.elecAura) electrify(cx, cy, 6);
     playSfx('explosion');
   }
-  if (typeof run !== 'undefined' && run.active) { run.kills++; meta.kills++; }
+  if (typeof run !== 'undefined' && run.active) {
+    run.kills++; // replays re-enact kills but never farm meta progression
+    if (typeof replayPlay === 'undefined' || !replayPlay.active) meta.kills++;
+  }
   playSfx('squish');
 }
 

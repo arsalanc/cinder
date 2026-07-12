@@ -4,9 +4,14 @@
 
 'use strict';
 
+// Palette tool (not an element): calls down real lightning at the cursor.
+// The strike is built from ELEC sparks, so all spark rules apply on impact.
+const TOOL_LIGHTNING = 255;
+
 const input = {
   element: E.SAND,
   brush: 4,
+  lastBolt: -999, // simFrame of the tool's last strike (rate limit)
   painting: false,
   panning: false,
   panStart: { cx: 0, cy: 0, camX: 0, camY: 0 },
@@ -27,7 +32,9 @@ function canvasToCell(canvas, clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const x = (camera.x + (clientX - rect.left) / rect.width * camera.w) | 0;
   const y = (camera.y + (clientY - rect.top) / rect.height * camera.h) | 0;
-  return [x, y];
+  // clamp: dragging off-canvas must not yield out-of-range targets (replay
+  // recordings clamp when packing, so live inputs have to match exactly)
+  return [Math.max(0, Math.min(SIM_W - 1, x)), Math.max(0, Math.min(SIM_H - 1, y))];
 }
 
 // paint a line of circles between two points (Bresenham-ish stepping)
@@ -98,7 +105,11 @@ function initInput(canvas) {
     else if (e.key === 'Enter') { if (!run.choosing) togglePlayMode(); }
     else if (key === 'm') { cameraFollow = !cameraFollow; }
     else if (key === 'r') {
-      if (playMode) { if (player.alive) spawnPlayer(); else startRun(); }
+      // the replay is driving — a live respawn would desync it
+      if (playMode && !replayPlay.active) {
+        if (player.alive) { replayNoteRespawn(); spawnPlayer(); }
+        else startRun();
+      }
     }
     else if (e.key === '[') { input.brush = Math.max(1, input.brush - 1); updateHUD(); }
     else if (e.key === ']') { input.brush = Math.min(24, input.brush + 1); updateHUD(); }
@@ -126,7 +137,17 @@ function applyInput() {
     }
     return;
   }
-  paintStroke(input.lastX, input.lastY, input.curX, input.curY, input.element);
+  if (input.element === TOOL_LIGHTNING) {
+    if (simFrame - input.lastBolt >= 10) {
+      input.lastBolt = simFrame;
+      // climb from the clicked cell to open air, then strike downward
+      let y = input.curY;
+      for (let t = 0; t < 10 && y > 1 && grid[idx(input.curX, y)] !== E.EMPTY; t++) y--;
+      if (grid[idx(input.curX, y)] === E.EMPTY) lightningStrikeAt(input.curX, y, false);
+    }
+  } else {
+    paintStroke(input.lastX, input.lastY, input.curX, input.curY, input.element);
+  }
   input.lastX = input.curX;
   input.lastY = input.curY;
 }
