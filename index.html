@@ -119,6 +119,13 @@
     cursor: pointer;
   }
   .controls button:hover { border-color: var(--accent); }
+  .seg { gap: 3px; }
+  .seg button {
+    padding: 5px 0;
+    font-size: 9px;
+    letter-spacing: 0.2px;
+  }
+  .seg button.on { border-color: var(--accent); color: var(--accent); background: #26201a; }
   #zoom-label {
     flex: 0 0 48px;
     display: flex;
@@ -334,6 +341,13 @@
           <button id="btn-zoom-out">&minus;</button>
           <span id="zoom-label">1&times;</span>
           <button id="btn-zoom-in">+</button>
+        </div>
+        <div class="controls seg" id="weather-seg" title="Weather: sporadic, off, or always on">
+          <button data-w="auto" class="on">Auto</button>
+          <button data-w="off">Off</button>
+          <button data-w="rain">Rain</button>
+          <button data-w="snow">Snow</button>
+          <button data-w="storm">Storm</button>
         </div>
         <div class="hint">
           Left-drag: paint &middot; Erase: palette tile<br>

@@ -13,10 +13,20 @@
 'use strict';
 
 const weather = {
-  mode: 'clear',  // 'clear' | 'rain' | 'snow' | 'storm'
-  timer: 1200,    // frames until the next mode roll
-  boltCd: 0,      // frames until the next lightning strike (storms)
+  mode: 'clear',    // 'clear' | 'rain' | 'snow' | 'storm'
+  timer: 1200,      // frames until the next mode roll
+  boltCd: 0,        // frames until the next lightning strike (storms)
+  override: 'auto', // sandbox control: 'auto' (sporadic) | 'off' | forced mode
 };
+
+// Creative-mode weather control. 'auto' = the normal sporadic cycle,
+// 'off' = permanent clear skies, anything else = that weather, always on.
+function setWeatherOverride(v) {
+  weather.override = v;
+  if (v === 'auto') setWeather('clear', 600 + rand() * 1200);
+  else if (v === 'off') setWeather('clear', 999999);
+  else setWeather(v, 999999);
+}
 
 function setWeather(mode, durationFrames) {
   weather.mode = mode;
@@ -37,13 +47,15 @@ function rollWeather() {
 }
 
 function resetWeather() {
+  weather.override = 'auto'; // runs always use the sporadic cycle
   weather.mode = 'clear';
   weather.timer = 900 + rand() * 1800;
   ambientChill = 0;
 }
 
 function updateWeather() {
-  if (--weather.timer <= 0) rollWeather();
+  if (weather.override === 'off') return;
+  if (weather.override === 'auto' && --weather.timer <= 0) rollWeather();
   if (weather.mode === 'clear') return;
 
   // precipitation falls from the sky row

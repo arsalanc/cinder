@@ -211,6 +211,11 @@ addReaction(E.WOOD, E.FUNGUS, E.FUNGUS, E.FUNGUS, 0.0006);
 addReaction(E.ACID, E.METAL, E.ACID, E.HYDROGEN, 0.03);
 addReaction(E.METAL, E.ACID, E.HYDROGEN, E.ACID, 0.03);
 
+// Wet gunpowder is ruined: soaked charges crumble to inert ash — flood the
+// crate before fighting near it
+addReaction(E.GUNPOWDER, E.WATER, E.ASH, E.WATER, 0.02);
+addReaction(E.WATER, E.GUNPOWDER, E.WATER, E.ASH, 0.02);
+
 // Combustion closes the water loop: burning hydrogen recombines into steam
 // (2H2 + O2 -> 2H2O — electrolysis splits water, ignition puts it back).
 // Races the flammability path, so a flash still propagates through the cloud.

@@ -34,6 +34,7 @@ function togglePlayMode() {
     clearCreatures();
     hideOverlay();
     resetModifiers(); // sandbox gets pristine element behavior back
+    updateWeatherUI(); // runs reset the weather override to auto
   }
 }
 
@@ -71,6 +72,12 @@ function selectElement(id) {
 function updateHUD() {
   const eff = effectiveBrush();
   hudBrush.textContent = input.brush + (eff !== input.brush ? ` → ${eff}` : '');
+}
+
+function updateWeatherUI() {
+  document.querySelectorAll('#weather-seg button').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.w === weather.override);
+  });
 }
 
 function updateZoomHUD() {
@@ -169,6 +176,12 @@ function main() {
   });
   document.getElementById('btn-zoom-in').addEventListener('click', () => setSandboxZoom(sandboxZoom * 1.5));
   document.getElementById('btn-zoom-out').addEventListener('click', () => setSandboxZoom(sandboxZoom / 1.5));
+  document.querySelectorAll('#weather-seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setWeatherOverride(btn.dataset.w);
+      updateWeatherUI();
+    });
+  });
   seedInput.addEventListener('keydown', e => {
     e.stopPropagation(); // don't trigger sim shortcuts while typing a seed
     if (e.key === 'Enter') { doGenerate(); seedInput.blur(); }
