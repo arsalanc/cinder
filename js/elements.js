@@ -49,7 +49,7 @@ const T = {
 };
 
 const DEFS = {
-  [E.EMPTY]:     { name: 'Empty',     type: T.STATIC, color: [12, 12, 16],    colorVar: 0,  density: 0 },
+  [E.EMPTY]:     { name: 'Erase',     type: T.STATIC, color: [12, 12, 16],    colorVar: 0,  density: 0 },
   [E.WALL]:      { name: 'Wall',      type: T.STATIC, color: [90, 90, 100],   colorVar: 12, density: 100 },
   [E.STONE]:     { name: 'Stone',     type: T.STATIC, color: [125, 122, 118], colorVar: 18, density: 100, dissolvable: true },
   [E.SAND]:      { name: 'Sand',      type: T.POWDER, color: [222, 182, 110], colorVar: 24, density: 60,  dissolvable: true },

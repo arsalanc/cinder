@@ -8,13 +8,20 @@ const input = {
   element: E.SAND,
   brush: 4,
   painting: false,
-  erasing: false,
+  panning: false,
+  panStart: { cx: 0, cy: 0, camX: 0, camY: 0 },
   lastX: -1,
   lastY: -1,
   curX: -1,
   curY: -1,
   keys: {},   // held-key state, read by the player each frame
 };
+
+// zoomed in, the same brush paints fewer cells — that's the precision mode
+function effectiveBrush() {
+  const z = typeof sandboxZoom !== 'undefined' ? sandboxZoom : 1;
+  return Math.max(1, Math.round(input.brush / z));
+}
 
 function canvasToCell(canvas, clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
@@ -30,7 +37,7 @@ function paintStroke(x0, y0, x1, y1, id) {
   for (let s = 0; s <= steps; s++) {
     const x = Math.round(x0 + dx * s / steps);
     const y = Math.round(y0 + dy * s / steps);
-    paintCircle(x, y, input.brush, id);
+    paintCircle(x, y, effectiveBrush(), id);
   }
 }
 
@@ -40,28 +47,44 @@ function initInput(canvas) {
   canvas.addEventListener('pointerdown', e => {
     if (playMode && e.button === 2) { cycleSpell(1); return; } // rmb: next spell
     canvas.setPointerCapture(e.pointerId);
+    if (!playMode && (e.button === 2 || e.button === 1)) {
+      // right/middle drag: pan the zoomed view (erase lives in the palette)
+      input.panning = true;
+      input.panStart.cx = e.clientX;
+      input.panStart.cy = e.clientY;
+      input.panStart.camX = sandboxCam.x;
+      input.panStart.camY = sandboxCam.y;
+      return;
+    }
     input.painting = true;
-    input.erasing = e.button === 2;
     const [x, y] = canvasToCell(canvas, e.clientX, e.clientY);
     input.lastX = input.curX = x;
     input.lastY = input.curY = y;
   });
 
   canvas.addEventListener('pointermove', e => {
+    if (input.panning) {
+      const rect = canvas.getBoundingClientRect();
+      sandboxCam.x = input.panStart.camX - (e.clientX - input.panStart.cx) / rect.width * camera.w;
+      sandboxCam.y = input.panStart.camY - (e.clientY - input.panStart.cy) / rect.height * camera.h;
+      clampSandboxCam();
+      return;
+    }
     const [x, y] = canvasToCell(canvas, e.clientX, e.clientY);
     input.curX = x;
     input.curY = y;
   });
 
-  const stop = () => { input.painting = false; };
+  const stop = () => { input.painting = false; input.panning = false; };
   canvas.addEventListener('pointerup', stop);
   canvas.addEventListener('pointercancel', stop);
 
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     if (playMode) { cycleSpell(e.deltaY < 0 ? -1 : 1); return; }
-    input.brush = Math.max(1, Math.min(24, input.brush + (e.deltaY < 0 ? 1 : -1)));
-    updateHUD();
+    // zoom toward the cursor; brush size moved to [ ] keys
+    const [ax, ay] = canvasToCell(canvas, e.clientX, e.clientY);
+    setSandboxZoom(sandboxZoom * (e.deltaY < 0 ? 1.25 : 0.8), ax, ay);
   }, { passive: false });
 
   window.addEventListener('keydown', e => {
@@ -103,8 +126,7 @@ function applyInput() {
     }
     return;
   }
-  const id = input.erasing ? E.EMPTY : input.element;
-  paintStroke(input.lastX, input.lastY, input.curX, input.curY, id);
+  paintStroke(input.lastX, input.lastY, input.curX, input.curY, input.element);
   input.lastX = input.curX;
   input.lastY = input.curY;
 }

@@ -13,12 +13,44 @@ const camera = { x: 0, y: 0, w: SIM_W, h: SIM_H };
 let cameraFollow = true;
 let VIEW_W = 160, VIEW_H = 100; // main.js tightens this on touch devices
 
+// Sandbox zoom: scroll/buttons zoom the creative view for precise placement;
+// right-drag pans. Play mode ignores this (it has the follow camera).
+let sandboxZoom = 1;
+const sandboxCam = { x: 0, y: 0 }; // view top-left, cell coords
+
+function clampSandboxCam() {
+  sandboxCam.x = Math.max(0, Math.min(SIM_W - SIM_W / sandboxZoom, sandboxCam.x));
+  sandboxCam.y = Math.max(0, Math.min(SIM_H - SIM_H / sandboxZoom, sandboxCam.y));
+}
+
+// Set zoom, keeping the world point (ax, ay) at the same screen position
+// (zoom happens toward the cursor). Anchor is optional.
+function setSandboxZoom(z, ax, ay) {
+  const nz = Math.max(1, Math.min(8, z));
+  if (ax !== undefined) {
+    const fx = (ax - camera.x) / camera.w;
+    const fy = (ay - camera.y) / camera.h;
+    sandboxCam.x = ax - fx * (SIM_W / nz);
+    sandboxCam.y = ay - fy * (SIM_H / nz);
+  } else {
+    // keep the view centered
+    sandboxCam.x = camera.x + camera.w / 2 - (SIM_W / nz) / 2;
+    sandboxCam.y = camera.y + camera.h / 2 - (SIM_H / nz) / 2;
+  }
+  sandboxZoom = nz;
+  clampSandboxCam();
+  if (typeof updateZoomHUD === 'function') updateZoomHUD();
+}
+
 function updateCamera() {
   const follow = typeof playMode !== 'undefined' && playMode && cameraFollow && player.alive;
-  const tw = follow ? VIEW_W : SIM_W;
-  const th = follow ? VIEW_H : SIM_H;
-  const tx = follow ? Math.max(0, Math.min(SIM_W - tw, player.x + player.w / 2 - tw / 2)) : 0;
-  const ty = follow ? Math.max(0, Math.min(SIM_H - th, player.y + player.h / 2 - th / 2)) : 0;
+  const zoomed = typeof playMode !== 'undefined' && !playMode && sandboxZoom > 1;
+  const tw = follow ? VIEW_W : SIM_W / (zoomed ? sandboxZoom : 1);
+  const th = follow ? VIEW_H : SIM_H / (zoomed ? sandboxZoom : 1);
+  const tx = follow ? Math.max(0, Math.min(SIM_W - tw, player.x + player.w / 2 - tw / 2))
+           : zoomed ? sandboxCam.x : 0;
+  const ty = follow ? Math.max(0, Math.min(SIM_H - th, player.y + player.h / 2 - th / 2))
+           : zoomed ? sandboxCam.y : 0;
   // smooth pan + zoom
   camera.w += (tw - camera.w) * 0.18;
   camera.h += (th - camera.h) * 0.18;

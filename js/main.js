@@ -8,7 +8,7 @@ const PALETTE = [
   E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC,
   E.SEED, E.ASH, E.BUG, E.PRED, E.SNOW,
   E.METAL, E.GLASS, E.HYDROGEN, E.FUNGUS, E.FISH,
-  E.MOTH, E.STONE, E.WALL,
+  E.MOTH, E.STONE, E.WALL, E.EMPTY,
 ];
 
 let paused = false;
@@ -69,7 +69,15 @@ function selectElement(id) {
 }
 
 function updateHUD() {
-  hudBrush.textContent = input.brush;
+  const eff = effectiveBrush();
+  hudBrush.textContent = input.brush + (eff !== input.brush ? ` → ${eff}` : '');
+}
+
+function updateZoomHUD() {
+  const z = sandboxZoom;
+  document.getElementById('zoom-label').textContent =
+    (Number.isInteger(z) ? z : z.toFixed(1)) + '×';
+  updateHUD(); // effective brush changes with zoom
 }
 
 function cssColor(id) {
@@ -144,6 +152,7 @@ function main() {
   updateRunHUD(); // shows persistent meta stats even before a run
   doGenerate(); // start on a procedural world
   if (location.hash === '#play') togglePlayMode(); // dev hook: straight into a run
+  if (location.hash === '#zoom') setSandboxZoom(4); // dev hook: zoomed sandbox view
 
   pauseBtn.addEventListener('click', togglePause);
   document.getElementById('btn-clear').addEventListener('click', () => {
@@ -158,6 +167,8 @@ function main() {
     seedInput.value = ''; // blank -> fresh random seed
     doGenerate();
   });
+  document.getElementById('btn-zoom-in').addEventListener('click', () => setSandboxZoom(sandboxZoom * 1.5));
+  document.getElementById('btn-zoom-out').addEventListener('click', () => setSandboxZoom(sandboxZoom / 1.5));
   seedInput.addEventListener('keydown', e => {
     e.stopPropagation(); // don't trigger sim shortcuts while typing a seed
     if (e.key === 'Enter') { doGenerate(); seedInput.blur(); }

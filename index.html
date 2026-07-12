@@ -119,6 +119,14 @@
     cursor: pointer;
   }
   .controls button:hover { border-color: var(--accent); }
+  #zoom-label {
+    flex: 0 0 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--dim);
+  }
   .controls input {
     flex: 1;
     min-width: 0;
@@ -322,9 +330,15 @@
           <input id="seed" type="text" placeholder="seed" spellcheck="false">
           <button id="btn-gen">Generate</button>
         </div>
+        <div class="controls">
+          <button id="btn-zoom-out">&minus;</button>
+          <span id="zoom-label">1&times;</span>
+          <button id="btn-zoom-in">+</button>
+        </div>
         <div class="hint">
-          Left-drag: paint &middot; Right-drag: erase<br>
-          Scroll / [ ]: brush size &middot; 1–9: element<br>
+          Left-drag: paint &middot; Erase: palette tile<br>
+          Scroll: zoom &middot; Right-drag: pan<br>
+          [ ]: brush size &middot; 1–9: element<br>
           P: pause &middot; C: clear &middot; Enter: start run
         </div>
       </div>

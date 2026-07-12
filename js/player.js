@@ -34,6 +34,22 @@ function playerSolidAt(cx, cy) {
   return t === T.STATIC || t === T.POWDER;
 }
 
+// True if the box at (px,py) overlaps immovable material (stone, ice, metal
+// ...) — the wriggle-out-when-buried logic may push through loose powder but
+// never through these.
+function playerStaticBlocked(px, py) {
+  const x0 = Math.floor(px), x1 = Math.ceil(px + player.w) - 1;
+  const y0 = Math.floor(py), y1 = Math.ceil(py + player.h) - 1;
+  for (let cy = y0; cy <= y1; cy++) {
+    for (let cx = x0; cx <= x1; cx++) {
+      if (cx < 0 || cx >= SIM_W || cy < 0 || cy >= SIM_H) return true;
+      const id = grid[idx(cx, cy)];
+      if (id !== E.EMPTY && id !== E.PLANT && TYPE[id] === T.STATIC) return true;
+    }
+  }
+  return false;
+}
+
 function playerCollides(px, py) {
   const x0 = Math.floor(px), x1 = Math.ceil(px + player.w) - 1;
   const y0 = Math.floor(py), y1 = Math.ceil(py + player.h) - 1;
@@ -187,9 +203,32 @@ function updatePlayer() {
     }
   }
 
-  // unstick if the world filled our cells (falling sand, freezing water...)
+  // --- the world can fill our cells: falling powder, freezing pools, growth.
+  // Loose grains get flicked out of the way (a seed landing on your head
+  // must not catapult you); only genuine burial moves the player, and the
+  // wriggle-up never pushes through solid rock — the old unconditional
+  // shove-up launched players through ceilings when seed rain kept
+  // re-triggering it.
+  const bx0 = Math.floor(player.x), bx1 = Math.ceil(player.x + player.w) - 1;
+  const by0 = Math.floor(player.y), by1 = Math.ceil(player.y + player.h) - 1;
+  for (let cy = by0; cy <= by1; cy++) {
+    for (let cx = bx0; cx <= bx1; cx++) {
+      if (cx < 0 || cx >= SIM_W || cy < 0 || cy >= SIM_H) continue;
+      const i = idx(cx, cy);
+      if (TYPE[grid[i]] !== T.POWDER) continue;
+      const near = cx - bx0 <= bx1 - cx ? bx0 - 1 : bx1 + 1;
+      const far  = near === bx0 - 1 ? bx1 + 1 : bx0 - 1;
+      for (const [tx, ty] of [[near, cy], [far, cy], [cx, by0 - 1]]) {
+        if (tx < 0 || tx >= SIM_W || ty < 0 || ty >= SIM_H) continue;
+        if (grid[idx(tx, ty)] === E.EMPTY) { swapCells(i, idx(tx, ty)); break; }
+      }
+    }
+  }
   let tries = 0;
-  while (playerCollides(player.x, player.y) && tries++ < 4) player.y -= 1;
+  while (playerCollides(player.x, player.y) && tries++ < 4 &&
+         !playerStaticBlocked(player.x, player.y - 1)) {
+    player.y -= 1;
+  }
 
   if (dmg > 0) {
     for (const hook of runState.onDamage) hook(dmg);
