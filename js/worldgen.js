@@ -73,11 +73,11 @@ function fbm(noise, x, y, octaves) {
 // (0 = just below the surface, 1 = bottom of the map)
 
 const BIOMES = [
-  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, temp: 12,  depth: [0, 1] },
+  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, fungus: 0.006, temp: 12,  depth: [0, 1] },
   { name: 'Overgrown Vault', base: E.STONE, vein: E.WOOD,      veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.40, deco: E.PLANT, decoAmount: 0.85,
-    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, temp: 22, depth: [0, 0.6] },
+    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, fungus: 0.002, temp: 22, depth: [0, 0.6] },
   { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    temp: -12, depth: [0, 0.7] },
-  { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    temp: 18,  depth: [0.3, 1],  hazardous: true },
+  { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    fungus: 0.004, temp: 18,  depth: [0.3, 1],  hazardous: true },
   { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    temp: 55,  depth: [0.55, 1], hazardous: true },
 ];
 
@@ -301,8 +301,133 @@ function generateWorld(seedStr, runDepth = 0) {
     }
   }
 
-  // 9. ambient temperature from the biome map (ice caves are freezing, the
-  //    volcanic depths swelter) — the field starts at its equilibrium
+  // 9. set-pieces: life beyond the flora coating.
+  //    Mushroom groves sprout from dark cavern floors (stalk + cap)
+  for (let y = 4; y < SIM_H - 5; y++) {
+    for (let x = 5; x < SIM_W - 5; x++) {
+      const i = idx(x, y);
+      if (y <= surf[x] || grid[i] !== E.EMPTY) continue;
+      const biome = BIOMES[worldBiomeMap[i]];
+      if (!biome.fungus || !isGrowBase(grid[i + SIM_W]) || rng() >= biome.fungus) continue;
+      let top = y;
+      const stalk = 1 + (rng() * 3 | 0);
+      for (let v = 0; v < stalk && top > 2 && grid[idx(x, top)] === E.EMPTY; v++) {
+        setCell(idx(x, top), E.FUNGUS);
+        top--;
+      }
+      const cap = 1 + (rng() * 2 | 0);
+      for (let dx = -cap; dx <= cap; dx++) {
+        const j = idx(x + dx, top);
+        if (grid[j] === E.EMPTY) setCell(j, E.FUNGUS);
+      }
+    }
+  }
+  //    Kelp beds reach up from pool floors; the bigger pools get fish
+  let fishBudget = 14;
+  for (let y = 6; y < SIM_H - 4; y++) {
+    for (let x = 5; x < SIM_W - 5; x++) {
+      const i = idx(x, y);
+      if (grid[i] !== E.WATER) continue;
+      const bed = grid[i + SIM_W];
+      if ((bed === E.STONE || bed === E.SAND || bed === E.WALL) && rng() < 0.05) {
+        const len = 1 + (rng() * 4 | 0);
+        for (let v = 0; v < len && y - v > 2; v++) {
+          const j = idx(x, y - v);
+          if (grid[j] !== E.WATER) break;
+          setCell(j, E.PLANT);
+        }
+        continue;
+      }
+      // fish need open water on all sides — only pools with real volume
+      if (fishBudget > 0 &&
+          grid[i - SIM_W] === E.WATER && grid[i + SIM_W] === E.WATER &&
+          grid[i - 1] === E.WATER && grid[i + 1] === E.WATER && rng() < 0.02) {
+        setCell(i, E.FISH);
+        fishBudget--;
+      }
+    }
+  }
+  //    Moths flutter above vegetation
+  let mothBudget = 10;
+  for (let y = 4; y < SIM_H - 4 && mothBudget > 0; y++) {
+    for (let x = 5; x < SIM_W - 5; x++) {
+      const i = idx(x, y);
+      if (grid[i] === E.EMPTY && grid[i + SIM_W] === E.PLANT && rng() < 0.005) {
+        setCell(i, E.MOTH);
+        if (--mothBudget === 0) break;
+      }
+    }
+  }
+
+  // 10. ruined works: dead machinery from whoever dug here before us.
+  //     Each ruin is an elevated metal walkway over one machine: a still-
+  //     running generator (metal shell, lava heart — its hot casing sheds
+  //     sparks via the thermoelectric rule), a glass vat of oil, or a
+  //     crate of gunpowder. Reachability is checked after generation, so
+  //     ruins can't seal the level.
+  let ruinsLeft = 2;
+  for (let attempt = 0; attempt < 200 && ruinsLeft > 0; attempt++) {
+    const rx = 14 + (rng() * (SIM_W - 28)) | 0;
+    const ry = 6 + (rng() * (SIM_H - 40)) | 0;
+    if (ry <= surf[rx] || grid[idx(rx, ry)] !== E.EMPTY) continue;
+    const biome = BIOMES[worldBiomeMap[idx(rx, ry)]];
+    if (biome.name !== 'Stone Caverns' && biome.name !== 'Oil Caverns') continue;
+    // drop to the cavern floor
+    let fy = ry;
+    while (fy < SIM_H - 8 && grid[idx(rx, fy + 1)] === E.EMPTY) fy++;
+    if (fy >= SIM_H - 8) continue;
+    // a mostly-solid ledge and mostly-open air will do — a ruin half sunk
+    // into rubble looks the part (perfect sites barely exist in real caves)
+    let ledge = 0, blocked = 0;
+    for (let dx = -5; dx <= 5; dx++) {
+      const below = grid[idx(rx + dx, fy + 1)];
+      if (below !== E.EMPTY && TYPE[below] === T.STATIC) ledge++;
+      for (let dy = 0; dy < 7; dy++) {
+        const g = grid[idx(rx + dx, fy - dy)];
+        if (g !== E.EMPTY && g !== E.PLANT) blocked++;
+      }
+    }
+    if (ledge < 8 || blocked > 12) continue;
+
+    // walkway: beam on two support legs
+    const by = fy - 5;
+    for (let dx = -5; dx <= 5; dx++) setCell(idx(rx + dx, by), E.METAL);
+    for (let dy = by + 1; dy <= fy; dy++) {
+      setCell(idx(rx - 4, dy), E.METAL);
+      setCell(idx(rx + 4, dy), E.METAL);
+    }
+    const machine = rng() * 3 | 0;
+    if (machine === 0) {
+      // generator: sealed 5x4 metal shell around a 2x2 lava heart
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = 0; dy < 4; dy++) {
+          const core = (dx === -1 || dx === 0) && (dy === 1 || dy === 2);
+          setCell(idx(rx + dx, fy - dy), core ? E.LAVA : E.METAL);
+        }
+      }
+    } else if (machine === 1) {
+      // storage vat: glass tub holding oil
+      for (let dy = 0; dy < 4; dy++) {
+        setCell(idx(rx - 3, fy - dy), E.GLASS);
+        setCell(idx(rx + 3, fy - dy), E.GLASS);
+      }
+      for (let dx = -3; dx <= 3; dx++) setCell(idx(rx + dx, fy), E.GLASS);
+      for (let dx = -2; dx <= 2; dx++)
+        for (let dy = 1; dy < 3; dy++) setCell(idx(rx + dx, fy - dy), E.OIL);
+    } else {
+      // supply crate: wood shell packed with gunpowder
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = 0; dy < 3; dy++) {
+          const shell = dx === -2 || dx === 2 || dy === 0 || dy === 2;
+          setCell(idx(rx + dx, fy - dy), shell ? E.WOOD : E.GUNPOWDER);
+        }
+      }
+    }
+    ruinsLeft--;
+  }
+
+  // 11. ambient temperature from the biome map (ice caves are freezing, the
+  //     volcanic depths swelter) — the field starts at its equilibrium
   for (let ty = 0; ty < TEMP_H; ty++) {
     for (let tx = 0; tx < TEMP_W; tx++) {
       const b = BIOMES[worldBiomeMap[idx(tx * 4 + 2, ty * 4 + 2)]];

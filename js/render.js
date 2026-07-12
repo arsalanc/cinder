@@ -79,6 +79,10 @@ function renderSim() {
         const pulse = Math.sin((simFrame + shade[i]) * 0.35) * 45;
         g += pulse; b += pulse * 0.6;
         if (Math.random() < 0.03) { r = 255; g = 255; b = 255; }
+      } else if (id === E.FUNGUS) {
+        // bioluminescent breathing glow
+        const pulse = (Math.sin((simFrame + shade[i] * 4) * 0.03) + 1) * 18;
+        r += pulse * 0.4; b += pulse;
       }
     }
     pixels[p]     = r < 0 ? 0 : r > 255 ? 255 : r;

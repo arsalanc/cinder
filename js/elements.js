@@ -33,6 +33,9 @@ const E = {
   GLASS: 22,   // lava + sand; acid-proof, shatters in explosions
   HYDROGEN: 23, // electrolysis gas; rises, accumulates at ceilings, flash-burns
   PRED: 24,    // hunter: eats bugs — the second trophic level
+  FUNGUS: 25,  // decomposer: creeps over dead wood, glows faintly; bugs graze it
+  FISH: 26,    // aquatic grazer: swims, eats underwater plants, flops on land
+  MOTH: 27,    // pollinator: sips plants without consuming them, scatters seeds
 };
 
 // Movement archetypes
@@ -88,9 +91,16 @@ const DEFS = {
                    flammability: 0.9, burnLife: 8 }, // no lifetime: pockets persist until ignited
   [E.PRED]:      { name: 'Hunter',    type: T.BUG,    color: [152, 44, 74],   colorVar: 20, density: 45,
                    flammability: 0.3, burnLife: 40, lifeMin: 300, lifeMax: 400, dissolvable: true },
+  [E.FUNGUS]:    { name: 'Fungus',    type: T.STATIC, color: [148, 108, 188], colorVar: 26, density: 100,
+                   flammability: 0.08, burnLife: 70, dissolvable: true },
+  // lifeMax below the breed threshold: newborns must graze before breeding
+  [E.FISH]:      { name: 'Fish',      type: T.BUG,    color: [116, 162, 204], colorVar: 22, density: 35,
+                   lifeMin: 300, lifeMax: 380, dissolvable: true },
+  [E.MOTH]:      { name: 'Moth',      type: T.BUG,    color: [214, 198, 142], colorVar: 20, density: 20,
+                   flammability: 0.45, burnLife: 25, lifeMin: 500, lifeMax: 700, dissolvable: true },
 };
 
-const NUM_ELEMENTS = 25;
+const NUM_ELEMENTS = 28;
 
 // Flat typed lookups for the hot sim loop
 const TYPE        = new Uint8Array(NUM_ELEMENTS);
@@ -124,8 +134,10 @@ for (const id in DEFS) {
 // ---------------------------------------------------------------------------
 const REACTIONS = {};
 
-function addReaction(a, b, a2, b2, p) {
-  REACTIONS[(a << 8) | b] = { a2, b2, p };
+// minTemp (optional): the reaction only runs at or above this temperature —
+// biology mostly (photosynthesis, germination stop in the cold)
+function addReaction(a, b, a2, b2, p, minTemp) {
+  REACTIONS[(a << 8) | b] = { a2, b2, p, minTemp };
 }
 
 // Water quenches fire (some of the water flashes to steam)
@@ -146,8 +158,9 @@ addReaction(E.WATER, E.ICE, E.ICE, E.ICE, 0.002);
 // Steam near ice condenses back to water
 addReaction(E.STEAM, E.ICE, E.WATER, E.ICE, 0.1);
 
-// Plants drink water to grow
-addReaction(E.WATER, E.PLANT, E.PLANT, E.PLANT, 0.02);
+// Plants drink water to grow — but photosynthesis stops in the cold
+// (without this, winter kelp drinks its own pool dry and then freezes)
+addReaction(E.WATER, E.PLANT, E.PLANT, E.PLANT, 0.02, 5);
 
 // Acid dissolves things (consumes itself sometimes; handled with two entries)
 for (const id in DEFS) {
@@ -165,12 +178,13 @@ addReaction(E.ELEC, E.WATER, E.EMPTY, E.EWATER, 1.0);
 addReaction(E.OIL, E.ELEC, E.FIRE, E.EMPTY, 0.4);
 
 // --- ecosystem cycles -------------------------------------------------------
+// (all growth is temp-gated: the seed bank waits out winter, then springs)
 // Seeds germinate on contact with water (consuming it: water becomes biomass)
-addReaction(E.SEED, E.WATER, E.PLANT, E.EMPTY, 0.01);
-addReaction(E.WATER, E.SEED, E.EMPTY, E.PLANT, 0.01);
+addReaction(E.SEED, E.WATER, E.PLANT, E.EMPTY, 0.01, 5);
+addReaction(E.WATER, E.SEED, E.EMPTY, E.PLANT, 0.01, 5);
 // Ash fertilizes: burned forests + rain -> regrowth
-addReaction(E.ASH, E.WATER, E.PLANT, E.EMPTY, 0.004);
-addReaction(E.WATER, E.ASH, E.EMPTY, E.PLANT, 0.004);
+addReaction(E.ASH, E.WATER, E.PLANT, E.EMPTY, 0.004, 5);
+addReaction(E.WATER, E.ASH, E.EMPTY, E.PLANT, 0.004, 5);
 // Burning vegetation releases its moisture as steam (fires seed rain)
 addReaction(E.PLANT, E.FIRE, E.STEAM, E.FIRE, 0.04);
 
@@ -186,3 +200,18 @@ addReaction(E.SNOW, E.WATER, E.WATER, E.WATER, 0.05);
 // Electrolysis: heavily electrified water bubbles off a little hydrogen
 // (kept slow — charging a pool shouldn't meaningfully drain it)
 addReaction(E.EWATER, E.EWATER, E.HYDROGEN, E.EWATER, 0.0008);
+
+// Fungus is the decomposer: it creeps slowly across dead wood, converting it
+// to more fungus — which bugs graze, so dead matter re-enters the food web
+addReaction(E.FUNGUS, E.WOOD, E.FUNGUS, E.FUNGUS, 0.0006);
+addReaction(E.WOOD, E.FUNGUS, E.FUNGUS, E.FUNGUS, 0.0006);
+
+// Corrosion: acid eating metal liberates hydrogen (overrides the generic
+// dissolve entry — the metal fizzes away as flammable gas, not into nothing)
+addReaction(E.ACID, E.METAL, E.ACID, E.HYDROGEN, 0.03);
+addReaction(E.METAL, E.ACID, E.HYDROGEN, E.ACID, 0.03);
+
+// Combustion closes the water loop: burning hydrogen recombines into steam
+// (2H2 + O2 -> 2H2O — electrolysis splits water, ignition puts it back).
+// Races the flammability path, so a flash still propagates through the cloud.
+addReaction(E.HYDROGEN, E.FIRE, E.STEAM, E.FIRE, 0.4);

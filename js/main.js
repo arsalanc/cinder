@@ -7,7 +7,8 @@ const PALETTE = [
   E.SAND, E.WATER, E.OIL, E.WOOD, E.PLANT, E.FIRE,
   E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC,
   E.SEED, E.ASH, E.BUG, E.PRED, E.SNOW,
-  E.METAL, E.GLASS, E.HYDROGEN, E.STONE, E.WALL,
+  E.METAL, E.GLASS, E.HYDROGEN, E.FUNGUS, E.FISH,
+  E.MOTH, E.STONE, E.WALL,
 ];
 
 let paused = false;
@@ -15,17 +16,16 @@ let playMode = false;
 const isTouch = typeof matchMedia !== 'undefined' &&
   (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window);
 let hudBrush, hudFps, hudCells, hudBiome, pauseBtn, seedInput;
-let hpRow, hpFill, hudStatus, manaFill, fuelFill;
+let hpFill, hudStatus, manaFill, fuelFill;
 
 function togglePlayMode() {
   playMode = !playMode;
-  document.getElementById('btn-play').textContent = playMode ? 'Exit Run' : 'Start Run';
-  hpRow.style.display = playMode ? 'flex' : 'none';
-  document.getElementById('mana-row').style.display = playMode ? 'flex' : 'none';
-  document.getElementById('fuel-row').style.display = playMode ? 'flex' : 'none';
+  document.getElementById('panel-play').style.display = playMode ? 'flex' : 'none';
+  document.getElementById('panel-create').style.display = playMode ? 'none' : 'flex';
+  document.getElementById('tab-play').classList.toggle('active', playMode);
+  document.getElementById('tab-create').classList.toggle('active', !playMode);
   document.getElementById('hotbar').style.display = playMode ? 'flex' : 'none';
   document.getElementById('touch').style.display = (playMode && isTouch) ? 'block' : 'none';
-  document.getElementById('mods').style.display = playMode ? 'block' : 'none';
   if (playMode) {
     startRun();
     updateSpellHUD();
@@ -82,9 +82,9 @@ function buildPalette() {
   PALETTE.forEach((id, n) => {
     const btn = document.createElement('button');
     btn.dataset.id = id;
-    const key = n < 9 ? `${n + 1}` : '';
+    btn.title = DEFS[id].name + (n < 9 ? ` (${n + 1})` : '');
     btn.innerHTML = `<span class="swatch" style="background:${cssColor(id)}"></span>` +
-                    `${DEFS[id].name}${key ? ` <kbd>${key}</kbd>` : ''}`;
+                    `<span class="pname">${DEFS[id].name}</span>`;
     btn.addEventListener('click', () => selectElement(id));
     box.appendChild(btn);
   });
@@ -101,12 +101,16 @@ function main() {
   hudBiome = document.getElementById('hud-biome');
   pauseBtn = document.getElementById('btn-pause');
   seedInput = document.getElementById('seed');
-  hpRow = document.getElementById('hp-row');
   hpFill = document.getElementById('hp-fill');
   manaFill = document.getElementById('mana-fill');
   fuelFill = document.getElementById('fuel-fill');
   hudStatus = document.getElementById('hud-status');
-  document.getElementById('btn-play').addEventListener('click', togglePlayMode);
+  document.getElementById('tab-play').addEventListener('click', () => {
+    if (!playMode) togglePlayMode();
+  });
+  document.getElementById('tab-create').addEventListener('click', () => {
+    if (playMode) togglePlayMode();
+  });
   document.getElementById('overlay-action').addEventListener('click', startRun);
   const soundBtn = document.getElementById('btn-sound');
   soundBtn.addEventListener('click', () => {
@@ -139,6 +143,7 @@ function main() {
   updateHUD();
   updateRunHUD(); // shows persistent meta stats even before a run
   doGenerate(); // start on a procedural world
+  if (location.hash === '#play') togglePlayMode(); // dev hook: straight into a run
 
   pauseBtn.addEventListener('click', togglePause);
   document.getElementById('btn-clear').addEventListener('click', () => {

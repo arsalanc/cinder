@@ -49,6 +49,7 @@ const TEMP_DEFAULT = 15;
 const temp        = new Float32Array(TEMP_CELLS).fill(TEMP_DEFAULT);
 const ambientTemp = new Float32Array(TEMP_CELLS).fill(TEMP_DEFAULT);
 const _tempPrev   = new Float32Array(TEMP_CELLS);
+const _metalMask  = new Uint8Array(TEMP_CELLS); // cells containing metal
 let ambientChill = 0; // global offset, driven by weather (cold snaps)
 
 // per-element heat emission into the local temp cell, per temp update
@@ -66,27 +67,46 @@ function tempAt(x, y) { return temp[(y >> 2) * TEMP_W + (x >> 2)]; }
 
 // Runs every 4th sim step (deterministic — pure arithmetic, no rand).
 function updateTemperature() {
-  // 1. emission: hot/cold elements push their temp cell
+  // 1. emission: hot/cold elements push their temp cell (the metal mask for
+  //    heat conduction is rebuilt in the same sweep)
+  _metalMask.fill(0);
   for (let y = 0; y < SIM_H; y++) {
     const row = y * SIM_W, trow = (y >> 2) * TEMP_W;
     for (let x = 0; x < SIM_W; x++) {
-      const h = HEAT[grid[row + x]];
-      if (h !== 0) temp[trow + (x >> 2)] += h;
+      const g = grid[row + x];
+      const h = HEAT[g];
+      if (h > 0) {
+        temp[trow + (x >> 2)] += h;
+      } else if (h < 0) {
+        // cold sources buffer their cell toward freezing but never chill it
+        // below 0 — otherwise a frozen-over pool self-refrigerates in a
+        // runaway (ice -> colder -> more ice) far below the biome ambient
+        const j = trow + (x >> 2);
+        if (temp[j] > 0) temp[j] = Math.max(0, temp[j] + h);
+      } else if (g === E.METAL) {
+        _metalMask[trow + (x >> 2)] = 1;
+      }
     }
   }
-  // 2. diffusion + relaxation toward the biome ambient (plus weather chill)
+  // 2. diffusion + relaxation toward the biome ambient (plus weather chill).
+  //    Metal conducts: metal cells exchange heat strongly along connected
+  //    metal and shed little to the air — a rod dipped in lava carries the
+  //    heat out to its far end (which the thermoelectric rule turns to power)
   _tempPrev.set(temp);
   for (let ty = 0; ty < TEMP_H; ty++) {
     const trow = ty * TEMP_W;
     for (let tx = 0; tx < TEMP_W; tx++) {
       const i = trow + tx;
       const s = _tempPrev[i];
-      let sum = 0, n = 0;
-      if (tx > 0)          { sum += _tempPrev[i - 1];      n++; }
-      if (tx + 1 < TEMP_W) { sum += _tempPrev[i + 1];      n++; }
-      if (ty > 0)          { sum += _tempPrev[i - TEMP_W]; n++; }
-      if (ty + 1 < TEMP_H) { sum += _tempPrev[i + TEMP_W]; n++; }
-      let t = s + (sum / n - s) * 0.15 + (ambientTemp[i] + ambientChill - s) * 0.04;
+      const metal = _metalMask[i];
+      let sum = 0, n = 0, msum = 0, mn = 0;
+      if (tx > 0)          { sum += _tempPrev[i - 1];      n++; if (metal && _metalMask[i - 1])      { msum += _tempPrev[i - 1];      mn++; } }
+      if (tx + 1 < TEMP_W) { sum += _tempPrev[i + 1];      n++; if (metal && _metalMask[i + 1])      { msum += _tempPrev[i + 1];      mn++; } }
+      if (ty > 0)          { sum += _tempPrev[i - TEMP_W]; n++; if (metal && _metalMask[i - TEMP_W]) { msum += _tempPrev[i - TEMP_W]; mn++; } }
+      if (ty + 1 < TEMP_H) { sum += _tempPrev[i + TEMP_W]; n++; if (metal && _metalMask[i + TEMP_W]) { msum += _tempPrev[i + TEMP_W]; mn++; } }
+      let t = s + (sum / n - s) * 0.15 +
+              (ambientTemp[i] + ambientChill - s) * (metal ? 0.01 : 0.04);
+      if (mn > 0) t += (msum / mn - s) * 0.45;
       if (t < -50) t = -50; else if (t > 150) t = 150;
       temp[i] = t;
     }
@@ -170,13 +190,18 @@ function stepLiquid(i, x, y, id) {
     // freeze from exposed surfaces downward in cold regions
     if (ct < 0) {
       const up = grid[i - SIM_W];
-      if ((up === E.EMPTY || up === E.ICE || up === E.SNOW) &&
-          rand() < Math.min(0.05, -ct * 0.002)) {
-        // supported water freezes solid; a droplet falling through cold air
-        // crystallizes into snow and keeps falling (no ice hanging in the sky)
-        const inAir = y + 1 < SIM_H && grid[i + SIM_W] === E.EMPTY;
-        setCell(i, inAir ? E.SNOW : E.ICE);
-        return;
+      if (up === E.EMPTY || up === E.ICE || up === E.SNOW) {
+        // a frozen lid insulates: water under ice freezes an order of
+        // magnitude slower, so deep ponds stay liquid (and habitable —
+        // kelp and fish live on under the ice) for a long while
+        const p = Math.min(0.05, -ct * 0.002) * (up === E.EMPTY ? 1 : 0.1);
+        if (rand() < p) {
+          // supported water freezes solid; a droplet falling through cold
+          // air crystallizes into snow and keeps falling (no floating ice)
+          const inAir = y + 1 < SIM_H && grid[i + SIM_W] === E.EMPTY;
+          setCell(i, inAir ? E.SNOW : E.ICE);
+          return;
+        }
       }
     }
     // exposed surfaces evaporate, faster the warmer it is (~old flat rate at
@@ -249,17 +274,31 @@ function stepGas(i, x, y, id) {
     return;
   }
   if (id === E.ELEC) {
-    // discharge into any adjacent water — a spark never drifts away from a
-    // pool it touches (the reaction table alone gives it only a one-frame,
-    // chance-of-a-pick window before the gas rises out of contact)
+    // sparks always discharge into what they touch — never drift away from
+    // it (the reaction table alone gives only a one-frame, chance-of-a-pick
+    // window before the gas rises out of contact): water electrifies,
+    // explosives detonate (electric tripwires!), hydrogen flashes
     for (let n = 0; n < 4; n++) {
       let j = -1;
       if (n === 0 && y > 0) j = i - SIM_W;
       else if (n === 1 && y + 1 < SIM_H) j = i + SIM_W;
       else if (n === 2 && x > 0) j = i - 1;
       else if (n === 3 && x + 1 < SIM_W) j = i + 1;
-      if (j >= 0 && grid[j] === E.WATER) {
+      if (j < 0) continue;
+      const t = grid[j];
+      if (t === E.WATER) {
         setCell(j, E.EWATER);
+        setCell(i, E.EMPTY);
+        return;
+      }
+      if (EXPLOSIVE[t]) {
+        explosionQueue.push(j);
+        setCell(i, E.EMPTY);
+        return;
+      }
+      if (t === E.HYDROGEN) {
+        setCell(j, E.FIRE);
+        life[j] = BURN_LIFE[E.HYDROGEN];
         setCell(i, E.EMPTY);
         return;
       }
@@ -337,6 +376,30 @@ function stepFire(i, x, y, id) {
   }
 }
 
+// Fauna feel the temperature field: cold sends them into torpor (they mostly
+// skip turns — no feeding, no breeding — while life keeps ticking down),
+// deep cold or cooking heat kills. Fish get a wider band: water buffers them,
+// so an iced-over pool is sluggish but survivable. Returns true if the
+// creature's turn is over.
+function faunaClimate(i, x, y, aquatic) {
+  const ct = tempAt(x, y);
+  if (ct > 70 && rand() < 0.01) { setCell(i, E.ASH); return true; } // cooked
+  if (ct < (aquatic ? -30 : -15) && rand() < 0.004) {
+    setCell(i, E.ASH); // froze to death
+    return true;
+  }
+  if (ct < (aquatic ? -10 : 0) && rand() < (aquatic ? 0.85 : 0.9)) {
+    life[i]++; // metabolic shutdown: dormant turns don't age the creature,
+    // so overwintering fauna can revive when the thaw comes. Torpid fish
+    // settle to the pool bottom — the last place the freeze front reaches.
+    if (aquatic && y + 1 < SIM_H && grid[i + SIM_W] === E.WATER) {
+      swapCells(i, i + SIM_W);
+    }
+    return true;
+  }
+  return false;
+}
+
 // Cellular fauna: grazers (BUG) eat plants, hunters (PRED) eat grazers.
 // Both breed when well-fed (crowding-limited so populations self-regulate)
 // and starve back into ash — a two-level trophic chain over the nutrient
@@ -344,6 +407,7 @@ function stepFire(i, x, y, id) {
 function stepBug(i, x, y, id) {
   if (life[i] === 0) { setCell(i, E.ASH); return; } // starved
   life[i]--;
+  if (faunaClimate(i, x, y, false)) return;
 
   const hunter = id === E.PRED;
   const prey    = hunter ? E.BUG : E.PLANT;
@@ -357,9 +421,11 @@ function stepBug(i, x, y, id) {
   const left  = x > 0 ? i - 1 : -1;
   const right = x + 1 < SIM_W ? i + 1 : -1;
 
-  // feed: eating takes the turn
+  // feed: eating takes the turn (grazers also browse fungus — the decomposer
+  // route feeds dead wood back into the food web)
   for (const j of [below, left, right, above]) {
-    if (j >= 0 && grid[j] === prey && rand() < 0.25) {
+    if (j >= 0 && (grid[j] === prey || (!hunter && grid[j] === E.FUNGUS)) &&
+        rand() < 0.25) {
       setCell(j, E.EMPTY);
       life[i] = Math.min(700, life[i] + eatGain);
       return;
@@ -399,6 +465,136 @@ function stepBug(i, x, y, id) {
   const side = rand() < 0.5 ? left : right;
   if (side >= 0 && grid[side] === E.EMPTY && rand() < 0.5) { swapCells(i, side); return; }
   if (above >= 0 && grid[above] === E.EMPTY && rand() < 0.08) swapCells(i, above);
+}
+
+// Fish live in water: swim, graze underwater plants, breed when fed, and
+// suffocate quickly on land (a stranded fish flops, then stills to ash).
+function stepFish(i, x, y, id) {
+  if (life[i] === 0) { setCell(i, E.ASH); return; }
+  life[i]--;
+  if (faunaClimate(i, x, y, true)) return;
+
+  const below = y + 1 < SIM_H ? i + SIM_W : -1;
+  const above = y > 0 ? i - SIM_W : -1;
+  const left  = x > 0 ? i - 1 : -1;
+  const right = x + 1 < SIM_W ? i + 1 : -1;
+  const dirs = [below, above, left, right];
+
+  let waterN = 0;
+  for (const j of dirs) {
+    if (j < 0) continue;
+    // kelp counts as habitat — a fish deep in a plant thicket is still wet
+    if (grid[j] === E.WATER || grid[j] === E.PLANT) waterN++;
+    else if (grid[j] === E.EWATER && rand() < 0.2) { setCell(i, E.ASH); return; } // shocked
+  }
+
+  if (waterN === 0) {
+    // beached: suffocate fast, flop toward lower ground
+    life[i] = life[i] > 12 ? life[i] - 12 : 0;
+    if (below >= 0 && grid[below] === E.EMPTY) { swapCells(i, below); return; }
+    const side = rand() < 0.5 ? left : right;
+    if (side >= 0 && grid[side] === E.EMPTY && rand() < 0.3) swapCells(i, side);
+    return;
+  }
+
+  // graze kelp; the plant grew by drinking water, so eating returns water
+  for (const j of dirs) {
+    if (j >= 0 && grid[j] === E.PLANT && rand() < 0.2) {
+      setCell(j, E.WATER);
+      life[i] = Math.min(800, life[i] + 120);
+      return;
+    }
+  }
+
+  // breed into adjacent water when well-fed, crowd-limited
+  if (life[i] > 500 && rand() < 0.008) {
+    let neighbors = 0, spot = -1;
+    for (const j of dirs) {
+      if (j < 0) continue;
+      if (grid[j] === E.FISH) neighbors++;
+      else if (grid[j] === E.WATER) spot = j;
+    }
+    if (neighbors < 2 && spot >= 0) {
+      setCell(spot, E.FISH);
+      life[i] -= 200;
+      return;
+    }
+  }
+
+  // swim: drift through the pool, slight downward bias so schools don't
+  // just collect along the surface
+  if (rand() < 0.35) {
+    const r = rand();
+    const order = r < 0.4 ? [below, left, right, above]
+                : r < 0.7 ? [left, right, below, above]
+                :           [right, left, below, above];
+    for (const j of order) {
+      // fish push through kelp too (the swap makes the fronds sway)
+      if (j >= 0 && (grid[j] === E.WATER || grid[j] === E.PLANT)) {
+        swapCells(i, j);
+        return;
+      }
+    }
+  }
+}
+
+// Moths pollinate: they sip from plants without consuming them (nectar keeps
+// them alive) and scatter seeds into the air nearby — meadows with moths
+// spread. They linger on flowers, drown in liquid, and burn readily.
+function stepMoth(i, x, y, id) {
+  if (life[i] === 0) { setCell(i, E.ASH); return; }
+  life[i]--;
+  if (faunaClimate(i, x, y, false)) return;
+
+  const below = y + 1 < SIM_H ? i + SIM_W : -1;
+  const above = y > 0 ? i - SIM_W : -1;
+  const left  = x > 0 ? i - 1 : -1;
+  const right = x + 1 < SIM_W ? i + 1 : -1;
+  const dirs = [below, above, left, right];
+
+  if (above >= 0 && TYPE[grid[above]] === T.LIQUID && rand() < 0.15) {
+    setCell(i, E.ASH); // submerged
+    return;
+  }
+
+  let onFlower = false;
+  for (const j of dirs) {
+    if (j >= 0 && grid[j] === E.PLANT) {
+      onFlower = true;
+      if (rand() < 0.15) life[i] = Math.min(900, life[i] + 50);
+      // pollination: carry a seed off into the open air
+      if (rand() < 0.004) {
+        for (const k of dirs) {
+          if (k >= 0 && grid[k] === E.EMPTY) { setCell(k, E.SEED); break; }
+        }
+      }
+      break;
+    }
+  }
+
+  // breed near food, solitary like hunters
+  if (onFlower && life[i] > 600 && rand() < 0.01) {
+    let neighbors = 0, spot = -1;
+    for (const j of dirs) {
+      if (j < 0) continue;
+      if (grid[j] === E.MOTH) neighbors++;
+      else if (grid[j] === E.EMPTY) spot = j;
+    }
+    if (neighbors < 1 && spot >= 0) {
+      setCell(spot, E.MOTH);
+      life[i] -= 250;
+      return;
+    }
+  }
+
+  // flutter: airborne random walk; linger when perched on a flower
+  if (onFlower && rand() < 0.85) return;
+  const nx = x + ((rand() * 3 | 0) - 1);
+  const ny = y + ((rand() * 3 | 0) - 1);
+  if (nx >= 0 && nx < SIM_W && ny >= 0 && ny < SIM_H) {
+    const j = ny * SIM_W + nx;
+    if (grid[j] === E.EMPTY && rand() < 0.6) swapCells(i, j);
+  }
 }
 
 // Fire and lava share this: try to ignite the 4 cardinal neighbors.
@@ -445,7 +641,8 @@ function stepReactions(i, x, y, id) {
     const other = grid[j];
     if (other === E.EMPTY && id !== E.EMPTY) continue;
     const r = REACTIONS[(id << 8) | other];
-    if (r && rand() < r.p) {
+    if (r && (r.minTemp === undefined || tempAt(x, y) >= r.minTemp) &&
+        rand() < r.p) {
       setCell(j, r.b2);
       // acid is consumed some of the time when it dissolves something
       if (id === E.ACID && r.b2 === E.EMPTY && rand() < 0.25) {
@@ -527,18 +724,49 @@ function simStep() {
           break;
         case T.GAS:    stepGas(i, x, y, id); break;
         case T.FIRE:   stepFire(i, x, y, id); break;
-        case T.BUG:    stepBug(i, x, y, id); break;
+        case T.BUG:
+          if (id === E.FISH) stepFish(i, x, y, id);
+          else if (id === E.MOTH) stepMoth(i, x, y, id);
+          else stepBug(i, x, y, id);
+          break;
         case T.STATIC:
-          // plants occasionally drop a seed into open air below
-          if (id === E.PLANT && rand() < 0.00012 && y + 1 < SIM_H &&
-              grid[i + SIM_W] === E.EMPTY) {
-            setCell(i + SIM_W, E.SEED);
+          if (id === E.PLANT) {
+            // frost kills exposed vegetation, scattering part of its seed
+            // bank (with meltwater + ash this makes cold snaps into seasons:
+            // die-back, then spring bloom). Touching liquid water spares it —
+            // kelp lives until its pool actually freezes solid.
+            if (!worldSettling && tempAt(x, y) < -5 && rand() < 0.003) {
+              const wet = (y > 0 && grid[i - SIM_W] === E.WATER) ||
+                          (y + 1 < SIM_H && grid[i + SIM_W] === E.WATER) ||
+                          (x > 0 && grid[i - 1] === E.WATER) ||
+                          (x + 1 < SIM_W && grid[i + 1] === E.WATER);
+              if (!wet) { setCell(i, rand() < 0.15 ? E.SEED : E.ASH); break; }
+            }
+            // and occasionally drop a seed into open air below
+            if (rand() < 0.00012 && y + 1 < SIM_H && grid[i + SIM_W] === E.EMPTY) {
+              setCell(i + SIM_W, E.SEED);
+            }
           } else if (id === E.ICE && !worldSettling) {
             // ice thaws in warm air (threshold above temperate ambient, so
             // sandbox ice keeps; hysteresis vs freezing-at-0 is deliberate)
             const ct = tempAt(x, y);
             if (ct > 20 && rand() < Math.min(0.05, (ct - 20) * 0.001)) {
               setCell(i, E.WATER);
+            }
+          } else if (id === E.METAL && !worldSettling) {
+            // thermoelectric: hot metal sheds sparks — a rod dipped in lava
+            // is a geothermal generator (cold metal is inert)
+            const ct = tempAt(x, y);
+            if (ct > 60 && rand() < (ct - 60) * 0.00004) {
+              const spots = [
+                y > 0 ? i - SIM_W : -1,
+                x > 0 ? i - 1 : -1,
+                x + 1 < SIM_W ? i + 1 : -1,
+                y + 1 < SIM_H ? i + SIM_W : -1,
+              ];
+              for (const j of spots) {
+                if (j >= 0 && grid[j] === E.EMPTY) { setCell(j, E.ELEC); break; }
+              }
             }
           }
           break;

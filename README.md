@@ -298,11 +298,103 @@ the boss dies (HP bar top-center, +30 hp and full mana on the kill).
 - **Snow** (weather) and **Hunter** (predator bug: eats grazers, solitary,
   starves to ash — the second trophic level; worldgen seeds a few).
 
-### Open ideas
-- Input recording for shareable deterministic replays; daily seed runs.
+## Cave life (done)
+
+Three more species round out the underground ecosystem, each a distinct niche:
+
+- **Fungus** (decomposer): glowing mushroom groves on dark cavern floors; it
+  creeps slowly across dead wood, and grazer bugs browse it — dead matter
+  re-enters the food web. Burns fast, dissolves in acid.
+- **Fish** (aquatic grazer): schools in the bigger generated pools, grazing
+  kelp beds that now grow from pool floors. Kelp counts as habitat (fish swim
+  through it; eating a kelp cell returns the water it grew from). Beached
+  fish suffocate to ash; electrified water shocks schools dead — though a
+  dense kelp thicket can insulate a pocket of the pool.
+- **Moth** (pollinator): flutters over meadows, sips nectar *without*
+  consuming plants, lingers on flowers, and scatters seeds into the air —
+  meadows with moths spread. Drowns, burns readily, starves away from food.
+
+Worldgen stamps the set-pieces: mushroom groves (stalk + cap) in Stone/Oil
+Caverns, kelp beds and fish in pools with real volume, moths above vegetation.
+
+## Industry (done)
+
+Metal and electricity are now native to the world, not just player tools:
+
+- **Heat conduction**: metal carries heat along itself (strong metal-to-metal
+  exchange in the temperature field, low loss to air). A rod dipped in lava
+  gets hot at the far end.
+- **Thermoelectric**: metal above 60° sheds ELEC sparks; cold metal is inert.
+  Together: dip a rod in lava, run it to a pool, and you've built a geothermal
+  generator — the pool electrifies at a distance. Verified end-to-end in tests.
+- **Corrosion**: acid eating metal liberates hydrogen instead of nothing —
+  acid pools near metal structures are slow-motion bombs.
+- **Ruined works** (worldgen set-pieces, Stone/Oil Caverns): elevated metal
+  walkways over one machine each — a still-running generator (sealed metal
+  shell, lava heart: its casing sheds sparks forever), a glass vat of oil, or
+  a wooden crate of gunpowder. Sites tolerate partial burial, so ruins sit
+  half-sunk in rubble. Portal/shard reachability is checked after stamping.
+
+## Seasons — temperature × biology (done)
+
+Life now feels the temperature field, which turns cold snaps into seasons:
+
+- **Frost kills exposed plants** below −5°, scattering part of their seed
+  bank (15% seeds, rest ash). Plants touching liquid water are spared — kelp
+  lives on under the ice until its pool truly freezes solid.
+- **Growth is temp-gated** (reactions carry an optional `minTemp`): no
+  photosynthesis, germination, or ash-fertilizing below 5°. The seed bank
+  literally waits out winter; thaw + meltwater = spring bloom.
+- **Cold torpor**: fauna go dormant below 0° — no feeding or breeding, but
+  metabolic shutdown means dormant turns don't age them, so they revive at
+  the thaw. Deep cold (−15°, fish −30°) kills; heat above 70° cooks.
+- **Fish overwinter**: torpid fish sink to the pool bottom — the last place
+  the freeze front reaches — and surface ice insulates (water under a frozen
+  lid freezes 10× slower), so iced-over ponds stay habitable a long time.
+- **Electricity closure**: sparks detonate gunpowder (electric tripwires!)
+  and flash hydrogen pockets — an over-electrolyzed pool can now ignite its
+  own product. Burning hydrogen recombines into steam (2H₂+O₂→2H₂O), so
+  electrolysis + combustion is a closed water loop.
+
+Two physics fixes came out of this: ice no longer self-refrigerates (cold
+sources buffer toward 0° but never chill below it — a frozen slab used to
+drag −12° ambient down to −37° in a runaway), and surface ice insulates the
+water below it.
+
+### Future directions
+
+**Combustion & atmosphere** — close the remaining loops:
+- Smoke suffocates: it pools at cave ceilings but is pure decoration today.
+  If it slowly killed bugs/moths (and stung the player), every underground
+  fire would be a two-part hazard — flame below, choking layer above.
+- Wet gunpowder is ruined (water contact → inert ash): flood the crate
+  before fighting near it.
+- Lightning striking sand vitrifies a fulgurite — a branching glass scar.
+- Boiler / steam pressure: sealed metal over heat bursts when trapped steam
+  has nowhere to go (needs a small per-pocket pressure count).
+
+**Behavioral gems** — small rules, big character:
+- Moths fly toward fire, and ignite (self-balancing pollinator culling).
+- Moths feed on glowing fungus — food in plantless caverns, and their
+  pollination would spread fungus the way it spreads meadows.
+- Bugs eat seeds (granivory): a natural brake on runaway meadow spread.
+- Predators too could feel seasons: hunting torpid prey during cold snaps.
+
+**Player & runs**:
+- Heat/cold status effects: freezing water saps hp, volcanic air burns slow
+  — makes biome temperature a survival mechanic, not just chemistry.
+- A deep "Rusted Works" biome built around dense ruins: metal terrain
+  (blast-resistant — forces acid or routing around), electrified puddles,
+  still-live generators as environmental weapons.
+- Spell triggers (Noita-style): spells that cast other spells on impact.
+- More set-pieces: shrines, collapsed shafts, buried caches worth a detour.
+
+**Infrastructure**:
+- Input recording → shareable deterministic replays; daily seed runs.
 - Chunked scrolling worlds (bigger than one screen) with sim sleeping.
-- Player heat/cold status effects (freezing water saps hp, heat haze).
-- More biome set-pieces; fungus/fish/pollinator fauna; spell triggers.
+
+Worth trying in sandbox today: oil already floats on water (density 20 vs
+30), so burning slicks on pools work emergently.
 
 ## Performance notes
 
