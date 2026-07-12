@@ -172,7 +172,10 @@ function stepLiquid(i, x, y, id) {
       const up = grid[i - SIM_W];
       if ((up === E.EMPTY || up === E.ICE || up === E.SNOW) &&
           rand() < Math.min(0.05, -ct * 0.002)) {
-        setCell(i, E.ICE);
+        // supported water freezes solid; a droplet falling through cold air
+        // crystallizes into snow and keeps falling (no ice hanging in the sky)
+        const inAir = y + 1 < SIM_H && grid[i + SIM_W] === E.EMPTY;
+        setCell(i, inAir ? E.SNOW : E.ICE);
         return;
       }
     }
