@@ -259,7 +259,12 @@ function main() {
         (!player.alive ? 'DEAD — R to respawn'
         : run.portalHint ? (bossAlive() ? 'dormant — slay the guardian' : 'dormant — collect ◆')
         : player.burning > 0 ? 'BURNING'
+        : player.warmth < 20 ? 'FREEZING'
+        : player.warmth > 90 ? 'OVERHEATING'
+        : player.warmth < 35 ? 'cold'
         : player.inLiquid ? 'swimming' : '');
+      hudStatus.style.color = player.warmth < 20 ? '#6fc8ff'
+        : player.warmth > 90 ? '#ff8c3c' : '';
     }
 
     frames++;

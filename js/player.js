@@ -20,6 +20,8 @@ const player = {
   fuel: 100,           // jetpack fuel — separate from mana on purpose
   maxFuel: 100,
   jetting: false,
+  warmth: 60,          // body warmth 0-100: falls in the cold, rises by heat
+  onIce: false,        // standing on ice — low traction
 };
 
 // Solid for the player: static materials and powders. Liquids/gases/fire are
@@ -61,8 +63,30 @@ function playerCollides(px, py) {
   return false;
 }
 
+// Equilibrium body-warmth for a given ambient temperature (shared by the
+// per-frame drain and by spawn-site selection so they agree exactly).
+function warmthTarget(ambient) {
+  return 55 + (ambient - 15) * (ambient < 15 ? 1.5 : 0.6);
+}
+
+function placeSpawn(px, py) {
+  player.x = px; player.y = py;
+  player.vx = 0; player.vy = 0;
+  player.hp = player.maxHp;
+  player.alive = true;
+  player.burning = 0;
+  player.hurtCd = 0;
+  player.fuel = player.maxFuel;
+  player.warmth = 60;
+}
+
 function spawnPlayer() {
-  for (let attempt = 0; attempt < 300; attempt++) {
+  // Prefer ground whose ambient keeps warmth in the comfortable band, so a
+  // fresh spawn never immediately bleeds hp to cold or heat. If the whole
+  // map is harsh, fall back to the most comfortable spot we found (never a
+  // random freezing/scorching one).
+  let best = null, bestScore = -Infinity;
+  for (let attempt = 0; attempt < 400; attempt++) {
     const x = 8 + ((rand() * (SIM_W - 16)) | 0);
     let groundY = -1;
     for (let y = 2; y < SIM_H - 4; y++) {
@@ -71,17 +95,13 @@ function spawnPlayer() {
     }
     if (groundY < player.h + 3) continue;
     const px = x - player.w / 2, py = groundY - player.h - 1;
-    if (!playerCollides(px, py)) {
-      player.x = px; player.y = py;
-      player.vx = 0; player.vy = 0;
-      player.hp = player.maxHp;
-      player.alive = true;
-      player.burning = 0;
-      player.hurtCd = 0;
-      player.fuel = player.maxFuel;
-      return;
-    }
+    if (playerCollides(px, py)) continue;
+    const t = warmthTarget(tempAt(x, Math.max(0, groundY - 1)));
+    if (t >= 30 && t <= 85) { placeSpawn(px, py); return; } // comfortable: done
+    const score = -Math.abs(t - 55); // else remember the coziest option
+    if (score > bestScore) { bestScore = score; best = [px, py]; }
   }
+  if (best) { placeSpawn(best[0], best[1]); return; }
   // desperate fallback: dead center, carve a pocket
   paintCircle(SIM_W >> 1, SIM_H >> 1, 6, E.EMPTY);
   player.x = (SIM_W >> 1) - player.w / 2;
@@ -92,6 +112,7 @@ function spawnPlayer() {
   player.burning = 0;
   player.hurtCd = 0;
   player.fuel = player.maxFuel;
+  player.warmth = 60;
 }
 
 function updatePlayer() {
@@ -136,6 +157,23 @@ function updatePlayer() {
   }
   player.inLiquid = liquidCells >= 3;
   if (touchedWater) player.burning = 0;
+
+  // --- body warmth (0-100, comfortable ~40-80): a remap of the ambient
+  // temperature, not the raw reading — a temperate 15° cave sits at a cozy
+  // 55, cold biomes pull you toward hypothermia, and only a near-furnace
+  // heat pushes toward heatstroke (lava/fire already do direct damage). Cold
+  // is the sensitive side (it's the seasons threat); wet doubles the chill.
+  const ambient = tempAt(
+    Math.max(0, Math.min(SIM_W - 1, Math.round(player.x + player.w / 2))),
+    Math.max(0, Math.min(SIM_H - 1, Math.round(player.y + player.h / 2))));
+  let target = warmthTarget(ambient);
+  if (player.burning > 0) target = 110;                 // on fire = plenty warm
+  else if (touchedWater && ambient < 20) target -= 15;  // wind-chill when wet
+  target = Math.max(-5, Math.min(120, target));
+  const rate = target < player.warmth ? (touchedWater ? 0.06 : 0.03) : 0.12;
+  player.warmth = Math.max(-5, Math.min(110, player.warmth + (target - player.warmth) * rate));
+  if (player.warmth < 20) dmg += (20 - player.warmth) * 0.004;      // hypothermia
+  else if (player.warmth > 90) dmg += (player.warmth - 90) * 0.010; // heatstroke
   if (player.burning > 0) {
     player.burning--;
     dmg += 0.08 * m.fireDmg;
@@ -151,8 +189,28 @@ function updatePlayer() {
   player.jetting = false;
   const move = right - left;
   if (move) player.facing = move;
-  player.vx = move * (player.inLiquid ? 0.45 : 0.75) * m.speed
-            * (inPlants ? 0.55 : 1);        // foliage is thick
+
+  // ice underfoot is slippery: instead of snapping vx to the input, we ease
+  // toward it (low traction) so momentum carries and stops become skids
+  player.onIce = false;
+  if (player.grounded) {
+    const fy = Math.floor(player.y + player.h + 0.2);
+    for (let cx = Math.floor(player.x); cx <= Math.ceil(player.x + player.w) - 1; cx++) {
+      if (grid[idx(Math.max(0, Math.min(SIM_W - 1, cx)), Math.min(SIM_H - 1, fy))] === E.ICE) {
+        player.onIce = true; break;
+      }
+    }
+  }
+  const targetVx = move * (player.inLiquid ? 0.45 : 0.75) * m.speed
+                 * (inPlants ? 0.55 : 1);    // foliage is thick
+  if (player.onIce && !player.inLiquid) {
+    // grip 0.08 gliding, a touch more when actively braking/turning
+    const grip = move === 0 ? 0.03 : 0.08;
+    player.vx += (targetVx - player.vx) * grip;
+    if (Math.abs(player.vx) < 0.02) player.vx = 0;
+  } else {
+    player.vx = targetVx;
+  }
   if (player.inLiquid) {
     player.vy += 0.03;                      // gentle sink
     if (up) player.vy -= 0.09;              // swim
@@ -245,9 +303,16 @@ function drawPlayer() {
   const sx = (player.x - camera.x) * cw;
   const sy = (player.y - camera.y) * ch;
   const w = player.w * cw, h = player.h * ch;
-  // body (flickers orange while burning)
-  displayCtx.fillStyle = player.burning > 0 && (simFrame & 4) ? '#ff8c3c' : '#e8e0d0';
-  displayCtx.fillRect(sx, sy, w, h);
+  // body: flickers orange while burning, blue-shivers when freezing, flushes
+  // red when overheating
+  let body = '#e8e0d0';
+  if (player.burning > 0 && (simFrame & 4)) body = '#ff8c3c';
+  else if (player.warmth < 20) body = (simFrame & 8) ? '#a9d6ff' : '#cfe6ff'; // shiver
+  else if (player.warmth > 90) body = '#ffb0a0';
+  displayCtx.fillStyle = body;
+  // shivering jitter when freezing
+  const jx = player.warmth < 20 ? (simFrame & 2 ? 0.5 : -0.5) : 0;
+  displayCtx.fillRect(sx + jx, sy, w, h);
   // eye, on the facing side
   displayCtx.fillStyle = '#1a1a22';
   const ex = sx + (player.facing > 0 ? w * 0.55 : w * 0.15);

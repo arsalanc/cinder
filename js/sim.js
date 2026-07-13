@@ -158,6 +158,14 @@ function stepPowder(i, x, y, id) {
   if (id === E.SNOW && !worldSettling) {
     const ct = tempAt(x, y);
     if (ct > 0 && rand() < ct * 0.00003) { setCell(i, E.WATER); return; }
+    // buried snow compacts into glacier ice: if there's a deep column of
+    // snow pressing down from above, the bottom of the pack crystallizes
+    else if (ct < 0 && y > 4 && grid[i - SIM_W] === E.SNOW &&
+             grid[i - 2 * SIM_W] === E.SNOW && grid[i - 3 * SIM_W] === E.SNOW &&
+             grid[i - 4 * SIM_W] === E.SNOW && rand() < 0.004) {
+      setCell(i, E.ICE);
+      return;
+    }
   }
   const d = DENSITY[id];
   if (y + 1 < SIM_H) {
