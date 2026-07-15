@@ -12,7 +12,7 @@ const CREATURE_TYPES = {
   },
   wisp: {  // fire-themed flyer; sheds embers, snuffed instantly by water
     w: 2, h: 2, hp: 10, speed: 0.55, fly: true, contactDmg: 6,
-    color: '#ffa54a', sight: 75, diesInWater: true, fireTrail: 0.02,
+    color: '#ffa54a', sight: 75, diesInWater: true, trail: { el: E.FIRE, p: 0.02 },
     deathFire: 2,
   },
   bloat: { // slow drifting sack of gunpowder; do not melee it
@@ -23,6 +23,31 @@ const CREATURE_TYPES = {
     w: 3, h: 3, hp: 14, speed: 0.15, fly: false, contactDmg: 5,
     color: '#7ec850', sight: 80,
     ranged: { cooldown: 110, speed: 1.6, dmg: 6 },
+  },
+  // --- biome signatures -----------------------------------------------------
+  shaleback: { // Stone Caverns: armored tank — slow, heavy, shrugs off hits
+    w: 4, h: 3, hp: 44, speed: 0.26, fly: false, contactDmg: 9,
+    color: '#8a8378', sight: 60, armor: 0.5,
+  },
+  pouncer: {  // Overgrown Vault: leaping predator that pounces from range
+    w: 3, h: 2, hp: 16, speed: 0.5, fly: false, contactDmg: 8,
+    color: '#4f9e5a', sight: 100, leap: true,
+  },
+  frostling: { // Ice Caves: chilling flyer whose touch saps your warmth
+    w: 3, h: 2, hp: 20, speed: 0.34, fly: true, contactDmg: 5,
+    color: '#bfe4ff', sight: 82, chill: 16,
+  },
+  seeper: {   // Oil Caverns: fireproof crawler that lays flammable oil slicks
+    w: 4, h: 2, hp: 30, speed: 0.2, fly: false, contactDmg: 5,
+    color: '#6b5a3a', sight: 70, fireImmune: true, trail: { el: E.OIL, p: 0.11 },
+  },
+  magmite: {  // Volcanic Depths: a lava-walker that trails molten rock
+    w: 4, h: 3, hp: 40, speed: 0.22, fly: false, contactDmg: 10,
+    color: '#d2601c', sight: 72, fireImmune: true, trail: { el: E.LAVA, p: 0.04 },
+  },
+  voltbug: {  // Rusted Works: a charged mite that electrifies nearby puddles
+    w: 3, h: 2, hp: 18, speed: 0.4, fly: true, contactDmg: 6,
+    color: '#cfe08a', sight: 88, elecAura: true,
   },
   // --- bosses (guard the portal on depths 3 and 6) --------------------------
   magmaworm: { // tunnels straight through terrain toward you, trailing lava
@@ -37,13 +62,15 @@ const CREATURE_TYPES = {
   },
 };
 
-// which creatures each biome spawns (weighted); this is the biome-flavor knob
+// which creatures each biome spawns (weighted); this is the biome-flavor knob.
+// Each biome leads with its signature enemy, backed by a few generalists.
 const BIOME_SPAWNS = {
-  'Stone Caverns':   [['grub', 5], ['wisp', 2], ['bloat', 2], ['spitter', 1]],
-  'Overgrown Vault': [['grub', 4], ['spitter', 4], ['bloat', 2]],
-  'Ice Caves':       [['grub', 6], ['spitter', 2], ['bloat', 2]], // no wisps: too wet
-  'Oil Caverns':     [['wisp', 4], ['bloat', 4], ['grub', 2]],    // yes, fire flyers in the oil
-  'Volcanic Depths': [['wisp', 6], ['grub', 2], ['bloat', 2]],
+  'Stone Caverns':   [['grub', 4], ['shaleback', 3], ['wisp', 1], ['bloat', 1], ['spitter', 1]],
+  'Overgrown Vault': [['pouncer', 4], ['spitter', 3], ['grub', 2], ['bloat', 1]],
+  'Ice Caves':       [['frostling', 4], ['grub', 3], ['shaleback', 2], ['spitter', 1]], // no wisps: too wet
+  'Oil Caverns':     [['seeper', 3], ['wisp', 3], ['bloat', 3], ['grub', 1]],
+  'Volcanic Depths': [['magmite', 4], ['wisp', 4], ['bloat', 1]],
+  'Rusted Works':    [['voltbug', 4], ['grub', 2], ['bloat', 2], ['shaleback', 1]],
 };
 
 const creatures = [];
@@ -112,7 +139,8 @@ function spawnCreatures(depth) {
 }
 
 function damageCreature(c, dmg) {
-  c.hp -= dmg;
+  const t = CREATURE_TYPES[c.key];
+  c.hp -= dmg * (1 - (t.armor || 0)); // armored types (shaleback) shrug off hits
   c.hurtFlash = 8;
   playSfx('hit');
 }
@@ -263,21 +291,35 @@ function updateCreatures() {
       }
       c.vx += (tvx - c.vx) * 0.1;
       c.vy += (tvy - c.vy) * 0.1;
-      if (t.fireTrail && rand() < t.fireTrail) {
-        const fy = Math.round(c.y + c.h);
-        const fx = Math.round(ccx);
-        if (fy < SIM_H - 1 && grid[idx(fx, fy)] === E.EMPTY) setCell(idx(fx, fy), E.FIRE);
-      }
     } else {
       if (chase) c.dir = dx > 0 ? 1 : -1;
       else if (rand() < 0.008) c.dir = -c.dir;
-      c.vx = c.dir * t.speed;
+      if (c.leapCd > 0) c.leapCd--;
       c.vy += 0.12;
       if (c.vy > 1.6) c.vy = 1.6;
       const grounded = creatureCollides(c, c.x, c.y + 0.2);
-      if (grounded && creatureCollides(c, c.x + c.dir, c.y)) {
-        if (!creatureCollides(c, c.x + c.dir, c.y - 2)) c.vy = -1.1; // hop
-        else if (!chase) c.dir = -c.dir;                             // turn
+      if (grounded) {
+        // leapers (pouncer) spring at the player; everything else walks
+        if (t.leap && chase && (c.leapCd || 0) <= 0 && dist < t.sight) {
+          c.vx = Math.sign(dx || c.dir) * t.speed * 3.5;
+          c.vy = -1.25;
+          c.leapCd = 80;
+        } else {
+          c.vx = c.dir * t.speed;
+          if (creatureCollides(c, c.x + c.dir, c.y)) {
+            if (!creatureCollides(c, c.x + c.dir, c.y - 2)) c.vy = -1.1; // hop
+            else if (!chase) c.dir = -c.dir;                            // turn
+          }
+        }
+      }
+      // airborne (a hop or a leap): keep horizontal momentum, just fall
+    }
+
+    // element trails: wisps shed fire, seepers leak oil, magmites drip lava
+    if (t.trail && rand() < t.trail.p) {
+      const tx = Math.round(ccx), ty = y1;
+      if (ty > 0 && ty < SIM_H && grid[idx(tx, ty)] === E.EMPTY) {
+        setCell(idx(tx, ty), t.trail.el);
       }
     }
 
@@ -305,6 +347,7 @@ function updateCreatures() {
         c.y < player.y + player.h && c.y + c.h > player.y) {
       player.hp -= t.contactDmg;
       player.hurtCd = 45;
+      if (t.chill) player.warmth = Math.max(-5, player.warmth - t.chill); // frostling bite
       playSfx('hurt');
       for (const hook of runState.onDamage) hook(t.contactDmg);
       if (player.hp <= 0) { player.hp = 0; player.alive = false; }

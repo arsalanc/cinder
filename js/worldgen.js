@@ -79,6 +79,10 @@ const BIOMES = [
   { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    temp: -12, depth: [0, 0.7] },
   { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    fungus: 0.004, temp: 18,  depth: [0.3, 1],  hazardous: true },
   { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    temp: 55,  depth: [0.55, 1], hazardous: true },
+  // Rusted Works: a deep industrial ruin. Metal terrain (conductive — sparks
+  // and lightning race through the walls) streaked with rust (sand veins),
+  // seeped puddles, and abandoned machinery (`works`). Warm from old furnaces.
+  { name: 'Rusted Works',    base: E.METAL, vein: E.SAND,      veinAmount: 0.25, liquid: E.WATER, liquidAmount: 0.25, deco: 0,       decoAmount: 0,    fungus: 0.003, temp: 28,  depth: [0.45, 1], hazardous: true, works: true },
 ];
 
 const worldBiomeMap = new Uint8Array(CELLS);
@@ -141,6 +145,55 @@ function connectCaverns(solidArr, rng) {
     if (k === largest || comps[k].size < 25) continue; // leave tiny air pockets sealed
     carveTunnel(solidArr, comps[k].rx, comps[k].ry, comps[largest].rx, comps[largest].ry, rng);
   }
+}
+
+// --- Rusted Works machinery (set-pieces) -----------------------------------
+// Legible industrial ruins: each reads at a glance and behaves like what it
+// looks like. Stamped onto a solid floor at (cx, fy) — the placement pass
+// guarantees an 11-wide ledge with clear air, so these draw within cx±5.
+
+// Generator: a molten-cored furnace wired by a metal rail to an open coolant
+// basin. The furnace heat conducts down the rail (thermoelectric rule) and
+// sheds sparks into the basin — the pool it "cools" stays lethally live.
+function stampGenerator(cx, fy) {
+  // furnace: a 5-wide metal box (x: cx-5..cx-1) around a 3x2 molten core
+  for (let dy = 0; dy <= 4; dy++) {
+    setCell(idx(cx - 5, fy - dy), E.METAL);     // left wall
+    setCell(idx(cx - 1, fy - dy), E.METAL);     // right wall
+  }
+  for (let dx = -5; dx <= -1; dx++) {
+    setCell(idx(cx + dx, fy - 4), E.METAL);     // roof
+    setCell(idx(cx + dx, fy), E.METAL);         // hearth
+  }
+  for (let dx = -4; dx <= -2; dx++)             // molten core (3 wide x 2 tall)
+    for (let dy = 1; dy <= 2; dy++) setCell(idx(cx + dx, fy - dy), E.LAVA);
+  // conduit rail carrying the furnace heat out to the basin
+  for (let x = cx; x <= cx + 2; x++) setCell(idx(x, fy), E.METAL);
+  // open coolant basin (x: cx+3..cx+5): the live rail keeps it electrified
+  setCell(idx(cx + 5, fy), E.METAL);
+  setCell(idx(cx + 5, fy - 1), E.METAL);
+  for (let dx = 3; dx <= 4; dx++)               // water, open air above it
+    for (let dy = 0; dy <= 1; dy++) setCell(idx(cx + dx, fy - dy), E.WATER);
+}
+
+// Storage vat: a glass tub of oil — acid-proof shell, flammable contents.
+function stampOilVat(cx, fy) {
+  for (let dy = 0; dy <= 3; dy++) {
+    setCell(idx(cx - 3, fy - dy), E.GLASS);
+    setCell(idx(cx + 3, fy - dy), E.GLASS);
+  }
+  for (let dx = -3; dx <= 3; dx++) setCell(idx(cx + dx, fy), E.GLASS);
+  for (let dx = -2; dx <= 2; dx++)
+    for (let dy = 1; dy < 3; dy++) setCell(idx(cx + dx, fy - dy), E.OIL);
+}
+
+// Munitions crate: a wooden shell packed with gunpowder.
+function stampCrate(cx, fy) {
+  for (let dx = -2; dx <= 2; dx++)
+    for (let dy = 0; dy < 3; dy++) {
+      const shell = dx === -2 || dx === 2 || dy === 0 || dy === 2;
+      setCell(idx(cx + dx, fy - dy), shell ? E.WOOD : E.GUNPOWDER);
+    }
 }
 
 // --- generation -------------------------------------------------------------
@@ -359,71 +412,36 @@ function generateWorld(seedStr, runDepth = 0) {
     }
   }
 
-  // 10. ruined works: dead machinery from whoever dug here before us.
-  //     Each ruin is an elevated metal walkway over one machine: a still-
-  //     running generator (metal shell, lava heart — its hot casing sheds
-  //     sparks via the thermoelectric rule), a glass vat of oil, or a
-  //     crate of gunpowder. Reachability is checked after generation, so
-  //     ruins can't seal the level.
-  let ruinsLeft = 2;
-  for (let attempt = 0; attempt < 200 && ruinsLeft > 0; attempt++) {
+  // 10. machinery: abandoned works, but only in the Rusted Works biome where
+  //     they belong (generators wired to coolant basins, oil vats, munitions
+  //     crates). Placed on any solid ledge with clear air; reachability is
+  //     re-checked after generation, so a machine can't seal the level.
+  let machinesLeft = 3;
+  for (let attempt = 0; attempt < 300 && machinesLeft > 0; attempt++) {
     const rx = 14 + (rng() * (SIM_W - 28)) | 0;
     const ry = 6 + (rng() * (SIM_H - 40)) | 0;
     if (ry <= surf[rx] || grid[idx(rx, ry)] !== E.EMPTY) continue;
-    const biome = BIOMES[worldBiomeMap[idx(rx, ry)]];
-    if (biome.name !== 'Stone Caverns' && biome.name !== 'Oil Caverns') continue;
-    // drop to the cavern floor
+    if (!BIOMES[worldBiomeMap[idx(rx, ry)]].works) continue;
+    // drop to the floor of the pocket
     let fy = ry;
     while (fy < SIM_H - 8 && grid[idx(rx, fy + 1)] === E.EMPTY) fy++;
     if (fy >= SIM_H - 8) continue;
-    // a mostly-solid ledge and mostly-open air will do — a ruin half sunk
-    // into rubble looks the part (perfect sites barely exist in real caves)
+    // want a mostly-solid ledge under a mostly-clear 11-wide pocket
     let ledge = 0, blocked = 0;
     for (let dx = -5; dx <= 5; dx++) {
       const below = grid[idx(rx + dx, fy + 1)];
       if (below !== E.EMPTY && TYPE[below] === T.STATIC) ledge++;
-      for (let dy = 0; dy < 7; dy++) {
-        const g = grid[idx(rx + dx, fy - dy)];
-        if (g !== E.EMPTY && g !== E.PLANT) blocked++;
+      for (let dy = 0; dy < 6; dy++) {
+        if (grid[idx(rx + dx, fy - dy)] !== E.EMPTY) blocked++;
       }
     }
-    if (ledge < 8 || blocked > 12) continue;
+    if (ledge < 8 || blocked > 10) continue;
 
-    // walkway: beam on two support legs
-    const by = fy - 5;
-    for (let dx = -5; dx <= 5; dx++) setCell(idx(rx + dx, by), E.METAL);
-    for (let dy = by + 1; dy <= fy; dy++) {
-      setCell(idx(rx - 4, dy), E.METAL);
-      setCell(idx(rx + 4, dy), E.METAL);
-    }
-    const machine = rng() * 3 | 0;
-    if (machine === 0) {
-      // generator: sealed 5x4 metal shell around a 2x2 lava heart
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = 0; dy < 4; dy++) {
-          const core = (dx === -1 || dx === 0) && (dy === 1 || dy === 2);
-          setCell(idx(rx + dx, fy - dy), core ? E.LAVA : E.METAL);
-        }
-      }
-    } else if (machine === 1) {
-      // storage vat: glass tub holding oil
-      for (let dy = 0; dy < 4; dy++) {
-        setCell(idx(rx - 3, fy - dy), E.GLASS);
-        setCell(idx(rx + 3, fy - dy), E.GLASS);
-      }
-      for (let dx = -3; dx <= 3; dx++) setCell(idx(rx + dx, fy), E.GLASS);
-      for (let dx = -2; dx <= 2; dx++)
-        for (let dy = 1; dy < 3; dy++) setCell(idx(rx + dx, fy - dy), E.OIL);
-    } else {
-      // supply crate: wood shell packed with gunpowder
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = 0; dy < 3; dy++) {
-          const shell = dx === -2 || dx === 2 || dy === 0 || dy === 2;
-          setCell(idx(rx + dx, fy - dy), shell ? E.WOOD : E.GUNPOWDER);
-        }
-      }
-    }
-    ruinsLeft--;
+    const r = rng();
+    if (r < 0.5) stampGenerator(rx, fy);
+    else if (r < 0.8) stampOilVat(rx, fy);
+    else stampCrate(rx, fy);
+    machinesLeft--;
   }
 
   // 11. ambient temperature from the biome map (ice caves are freezing, the

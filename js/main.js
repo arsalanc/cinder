@@ -180,6 +180,10 @@ function main() {
   updateHUD();
   updateRunHUD(); // shows persistent meta stats even before a run
   doGenerate(); // start on a procedural world
+  if (location.hash.startsWith('#seed=')) {       // load a specific seed
+    seedInput.value = decodeURIComponent(location.hash.slice(6));
+    doGenerate();
+  }
   if (location.hash === '#play') togglePlayMode(); // dev hook: straight into a run
   if (location.hash === '#zoom') setSandboxZoom(4); // dev hook: zoomed sandbox view
 
