@@ -106,17 +106,25 @@ function spawnBoss() {
 }
 
 function beginLevel() {
-  generateWorld(run.seed + '#' + run.depth, run.depth);
-  spawnPlayer();
-  const reach = reachableFrom(
-    Math.round(player.x + player.w / 2),
-    Math.round(player.y + player.h / 2));
-  placePortal(reach);
   if (isBossDepth(run.depth)) {
-    shards.length = 0; // boss levels: slay the guardian instead of gathering
-    spawnCreatures(Math.max(1, run.depth - 2)); // lighter trash-mob presence
+    // a purpose-built arena: player on the left shelf, portal + boss on the
+    // right, water reservoir between — the worm has to cross to reach you
+    generateBossChamber(run.seed + '#' + run.depth,
+      run.depth >= WIN_DEPTH ? 'tempest' : 'magmaworm');
+    placeSpawn(bossArena.spawnX - player.w / 2, bossArena.floorY - player.h - 1);
+    portal.x = bossArena.portalX;
+    portal.y = bossArena.floorY - 1;
+    paintCircle(portal.x, portal.y - 1, 4, E.EMPTY);
+    shards.length = 0;   // slay the guardian instead of gathering shards
+    clearCreatures();    // a focused duel — no trash mobs cluttering the arena
     spawnBoss();
   } else {
+    generateWorld(run.seed + '#' + run.depth, run.depth);
+    spawnPlayer();
+    const reach = reachableFrom(
+      Math.round(player.x + player.w / 2),
+      Math.round(player.y + player.h / 2));
+    placePortal(reach);
     placeShards(reach);
     spawnCreatures(run.depth);
   }
@@ -356,8 +364,29 @@ function drawBossBar() {
   const x = (displayCanvas.width - w) / 2;
   displayCtx.fillStyle = 'rgba(10, 10, 16, 0.7)';
   displayCtx.fillRect(x - 2, 8, w + 4, 12);
-  displayCtx.fillStyle = '#d84a3a';
+  // bar flashes gold while the boss is in a vulnerable window (hit it now)
+  displayCtx.fillStyle = b.exposedT > 0 ? '#ffe08a' : '#d84a3a';
   displayCtx.fillRect(x, 10, w * Math.max(0, b.hp / t.hp), 8);
+  // phase thresholds so the rhythm is readable
+  displayCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  displayCtx.fillRect(x + w * 0.34, 9, 1.5, 10);
+  displayCtx.fillRect(x + w * 0.67, 9, 1.5, 10);
+  // one-line state hint: the fight has rules, so the bar teaches them
+  let hint = '';
+  if ((b.surgeT || 0) > 0) hint = 'MAGMA SURGE — dodge the geysers';
+  else if ((b.squallT || 0) > 0) hint = 'STORM SQUALL — take cover';
+  else if (b.exposedT > 0) hint = 'EXPOSED — strike now (stomp it!)';
+  else if ((b.chargingT || 0) > 0) hint = 'CHARGING — get behind cover';
+  else if ((b.breachTel || 0) > 0) hint = 'IT\'S COMING UP — move!';
+  else if (b.key === 'magmaworm') hint = 'molten shell — quench it in water';
+  else if (b.key === 'tempest') hint = 'storm-charged — soak it to short it out';
+  if (hint) {
+    displayCtx.font = '10px monospace';
+    displayCtx.textAlign = 'center';
+    displayCtx.fillStyle = b.exposedT > 0 ? '#ffe08a' : 'rgba(232, 230, 240, 0.75)';
+    displayCtx.fillText(hint, displayCanvas.width / 2, 31);
+    displayCtx.textAlign = 'left';
+  }
 }
 
 function drawPortal() {

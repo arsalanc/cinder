@@ -36,6 +36,7 @@ const E = {
   FUNGUS: 25,  // decomposer: creeps over dead wood, glows faintly; bugs graze it
   FISH: 26,    // aquatic grazer: swims, eats underwater plants, flops on land
   MOTH: 27,    // pollinator: sips plants without consuming them, scatters seeds
+  MOLTEN: 28,  // molten metal: white-hot liquid that casts back into solid metal
 };
 
 // Movement archetypes
@@ -98,9 +99,12 @@ const DEFS = {
                    lifeMin: 300, lifeMax: 380, dissolvable: true },
   [E.MOTH]:      { name: 'Moth',      type: T.BUG,    color: [214, 198, 142], colorVar: 20, density: 20,
                    flammability: 0.45, burnLife: 25, lifeMin: 500, lifeMax: 700, dissolvable: true },
+  // denser than lava (48 vs 40): molten metal sinks through a lava bath
+  [E.MOLTEN]:    { name: 'Molten',    type: T.LIQUID, color: [255, 196, 110], colorVar: 24, density: 48,
+                   dispersion: 1 },
 };
 
-const NUM_ELEMENTS = 28;
+const NUM_ELEMENTS = 29;
 
 // Flat typed lookups for the hot sim loop
 const TYPE        = new Uint8Array(NUM_ELEMENTS);
@@ -220,3 +224,17 @@ addReaction(E.WATER, E.GUNPOWDER, E.WATER, E.ASH, 0.02);
 // (2H2 + O2 -> 2H2O — electrolysis splits water, ignition puts it back).
 // Races the flammability path, so a flash still propagates through the cloud.
 addReaction(E.HYDROGEN, E.FIRE, E.STEAM, E.FIRE, 0.4);
+
+// Smelting: sustained direct lava contact slowly melts metal (deliberately a
+// crawl — a furnace takes real time, a lava-dipped generator rod stays
+// serviceable for minutes before it wears through, and a stray drip only
+// pits a wall; the same rule makes an always-running generator eventually
+// melt its own housing). Molten metal melts adjacent metal at the same rate.
+addReaction(E.METAL, E.LAVA, E.MOLTEN, E.LAVA, 0.0001);
+addReaction(E.LAVA, E.METAL, E.LAVA, E.MOLTEN, 0.0001);
+addReaction(E.METAL, E.MOLTEN, E.MOLTEN, E.MOLTEN, 0.0001);
+addReaction(E.MOLTEN, E.METAL, E.MOLTEN, E.MOLTEN, 0.0001);
+// Quenching: water flash-casts molten metal solid (mirrors lava -> stone,
+// but the result is conductive METAL — this is what makes it fabrication)
+addReaction(E.MOLTEN, E.WATER, E.METAL, E.STEAM, 0.8);
+addReaction(E.WATER, E.MOLTEN, E.STEAM, E.METAL, 0.8);

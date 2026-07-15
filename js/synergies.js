@@ -229,7 +229,13 @@ function rollChoices(n, takenNames) {
 function applyAuras() {
   const cx = player.x + player.w / 2;
   const cy = player.y + player.h / 2;
+  // never entomb the player: for auras that create solid cells (Frost Aura
+  // freezing the water you're standing in), keep a body-shaped gap with a
+  // 1-cell margin so you can always move out
+  const bx0 = Math.floor(player.x) - 1, bx1 = Math.ceil(player.x + player.w);
+  const by0 = Math.floor(player.y) - 1, by1 = Math.ceil(player.y + player.h);
   for (const a of runState.auras) {
+    const solidTo = TYPE[a.to] === T.STATIC || TYPE[a.to] === T.POWDER;
     const r2 = a.r * a.r;
     for (let dy = -a.r; dy <= a.r; dy++) {
       const y = Math.round(cy + dy);
@@ -238,6 +244,7 @@ function applyAuras() {
         const x = Math.round(cx + dx);
         if (x < 1 || x >= SIM_W - 1) continue;
         if (dx * dx + dy * dy > r2 || rand() >= a.p) continue;
+        if (solidTo && x >= bx0 && x <= bx1 && y >= by0 && y <= by1) continue;
         const i = idx(x, y);
         if (grid[i] === a.from) setCell(i, a.to);
       }

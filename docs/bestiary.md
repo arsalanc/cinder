@@ -18,5 +18,5 @@ signature enemy; bosses guard the portal on depths 3 and 6.
 | Seeper | Oil Caverns | 30 | 0.2 | 5 | walks | trails oil; fireproof |
 | Magmite | Volcanic Depths | 40 | 0.22 | 10 | walks | trails lava; fireproof |
 | Voltbug | Rusted Works | 18 | 0.4 | 6 | flies | electrifies nearby water |
-| Magmaworm | Boss (depth 3 & 6) | 260 | 0.32 | 16 | burrows | **boss**; trails lava; fireproof; sizzles in water; tunnels through terrain |
-| Tempest | Boss (depth 3 & 6) | 220 | 0.42 | 12 | flies | **boss**; electrifies nearby water; lobs arcing electricity |
+| Magmaworm | Boss (depth 3 & 6) | 260 | 0.32 | 16 | burrows | **boss**; armored (−100% weapon damage); trails lava; fireproof; tunnels through terrain |
+| Tempest | Boss (depth 3 & 6) | 240 | 0.42 | 12 | flies | **boss**; armored (−70% weapon damage); electrifies nearby water; lobs arcing electricity |

@@ -7,8 +7,9 @@ const PALETTE = [
   E.SAND, E.WATER, E.OIL, E.WOOD, E.PLANT, E.FIRE,
   E.ACID, E.LAVA, E.GUNPOWDER, E.ICE, E.ELEC,
   E.SEED, E.ASH, E.BUG, E.PRED, E.SNOW,
-  E.METAL, E.GLASS, E.HYDROGEN, E.FUNGUS, E.FISH,
-  E.MOTH, E.STONE, E.WALL, TOOL_LIGHTNING, E.EMPTY,
+  E.METAL, E.MOLTEN, E.GLASS, E.HYDROGEN, E.FUNGUS,
+  E.FISH, E.MOTH, E.STONE, E.WALL, TOOL_LIGHTNING,
+  E.EMPTY,
 ];
 
 let paused = false;
@@ -185,6 +186,16 @@ function main() {
     doGenerate();
   }
   if (location.hash === '#play') togglePlayMode(); // dev hook: straight into a run
+  if (location.hash.startsWith('#boss')) {          // dev: drop straight into a boss arena
+    // #boss → magma worm (depth 3); #boss=tempest → the final boss; #boss=4 → depth 4
+    const arg = location.hash.slice(5).replace(/^=/, '').toLowerCase();
+    const depth = arg === 'tempest' ? WIN_DEPTH
+      : arg === 'magmaworm' || arg === '' ? 3
+      : (parseInt(arg, 10) || 3);
+    togglePlayMode();
+    run.depth = depth;
+    beginLevel();
+  }
   if (location.hash === '#zoom') setSandboxZoom(4); // dev hook: zoomed sandbox view
 
   pauseBtn.addEventListener('click', togglePause);

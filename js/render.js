@@ -106,6 +106,11 @@ function renderSim() {
         // lava pulses
         const pulse = Math.sin((simFrame + shade[i]) * 0.1) * 20;
         r += pulse; g += pulse * 0.4;
+      } else if (id === E.MOLTEN) {
+        // white-hot shimmer, brighter and faster than lava
+        const pulse = Math.sin((simFrame + shade[i]) * 0.22) * 26;
+        g += pulse * 0.7; b += pulse;
+        if (Math.random() < 0.02) { r = 255; g = 255; b = 235; }
       } else if (id === E.EWATER) {
         // live water arcs and shimmers
         const pulse = Math.sin((simFrame + shade[i]) * 0.35) * 45;

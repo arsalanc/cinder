@@ -459,3 +459,88 @@ function biomeNameAt(x, y) {
   if (x < 0 || x >= SIM_W || y < 0 || y >= SIM_H) return '';
   return BIOMES[worldBiomeMap[idx(x, y)]].name;
 }
+
+// --- boss chambers ----------------------------------------------------------
+// Boss depths get a purpose-built (but still seed-varied) arena instead of a
+// random cave, so the fight's ingredients are guaranteed: a bounded room the
+// boss can't tunnel out of, diggable interior, and — for the Magma Worm — a
+// large water reservoir that is both its weakness and, once the arena
+// superheats, the player's refuge. game.js reads `bossArena` for spawn/portal.
+let bossArena = null;
+
+function generateBossChamber(seedStr, boss) {
+  worldSeed = seedStr;
+  const seed = hashSeed(seedStr);
+  seedSim(seed ^ 0x5F356495);
+  const rng = mulberry32(seed);
+  const noise = makeNoise2D(mulberry32(seed ^ 0x51ED2769));
+  clearSim();
+
+  // the tempest is a flyer: give it headroom, taller cover, smaller pools
+  const storm = boss === 'tempest';
+  const CEIL = storm ? 15 : 24;
+  const FLOOR = SIM_H - 24;
+
+  // 1. solid rock everywhere, indestructible WALL on the border (contained)
+  for (let y = 0; y < SIM_H; y++) {
+    for (let x = 0; x < SIM_W; x++) {
+      const border = x < 3 || x >= SIM_W - 3 || y < 3 || y >= SIM_H - 3;
+      setCell(idx(x, y), border ? E.WALL : E.STONE);
+    }
+  }
+
+  // 2. carve the open arena between ceiling and floor (organic top edge)
+  for (let x = 6; x < SIM_W - 6; x++) {
+    const top = CEIL + (noise(x * 0.05, 0.3) * 8 | 0);
+    for (let y = top; y < FLOOR; y++) setCell(idx(x, y), E.EMPTY);
+  }
+
+  // 3. a central water reservoir sunk into the floor — kept clear of the
+  //    left spawn shelf and the right portal shelf. The worm's arena gets a
+  //    wide quench pool; the tempest's a modest one (its squalls add more).
+  const rw = (storm ? 18 : 32) + (rng() * 8 | 0);
+  const rcx = Math.max(rw + 28, Math.min(SIM_W - rw - 26, (SIM_W >> 1) + (rng() * 30 - 15 | 0)));
+  for (let x = rcx - rw; x <= rcx + rw; x++) {
+    if (x < 8 || x >= SIM_W - 8) continue;
+    for (let y = FLOOR; y <= FLOOR + 7; y++) setCell(idx(x, y), E.WATER);
+  }
+
+  // 4. cover pillars (diggable rock) in the side thirds, clear of the pool.
+  //    In the tempest arena they're taller (bolt shelter) and metal-capped —
+  //    lightning rods that ground its nova out before it reaches you.
+  const pillars = 3 + (rng() * 2 | 0);
+  for (let p = 0; p < pillars; p++) {
+    const px = 20 + (rng() * (SIM_W - 40) | 0);
+    if (Math.abs(px - rcx) < rw + 8) continue;
+    const ph = (storm ? 22 : 14) + (rng() * 22 | 0);
+    const pw = 2 + (rng() * 2 | 0);
+    for (let x = px; x < px + pw && x < SIM_W - 6; x++) {
+      for (let y = FLOOR - ph; y < FLOOR; y++) setCell(idx(x, y), E.STONE);
+      if (storm) {
+        for (let d = 1; d <= 3; d++) setCell(idx(x, FLOOR - ph - d), E.METAL);
+      }
+    }
+  }
+
+  // 5. ceiling stalactites for texture (the worm tunnels through them anyway)
+  for (let x = 8; x < SIM_W - 8; x++) {
+    if (noise(x * 0.12, 2.7) > 0.72) {
+      const len = 2 + (noise(x * 0.3, 5.0) * 5 | 0);
+      for (let d = 0; d < len; d++) setCell(idx(x, CEIL + d), E.STONE);
+    }
+  }
+
+  // 6. ambient to match the guardian: warm-but-survivable for the worm (the
+  //    fight cranks it hotter via lava); temperate storm air for the tempest
+  worldBiomeMap.fill(Math.max(0, BIOMES.findIndex(
+    b => b.name === (storm ? 'Rusted Works' : 'Volcanic Depths'))));
+  ambientTemp.fill(storm ? 18 : 35);
+  temp.set(ambientTemp);
+
+  // 7. settle the reservoir (movement only — no chemistry)
+  worldSettling = true;
+  for (let k = 0; k < 120; k++) simStep();
+  worldSettling = false;
+
+  bossArena = { spawnX: 12, portalX: SIM_W - 14, floorY: FLOOR, reservoirX: rcx };
+}

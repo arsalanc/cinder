@@ -140,6 +140,7 @@ function updatePlayer() {
       else if (id === E.PLANT) plantCells.push(i);
       else if (id === E.FIRE) { dmg += 0.25 * m.fireDmg; player.burning = Math.max(player.burning, 160 * m.burnTime); }
       else if (id === E.LAVA) { dmg += 1.1 * m.lavaDmg; player.burning = 240 * m.burnTime; }
+      else if (id === E.MOLTEN) { dmg += 1.2 * m.lavaDmg; player.burning = 240 * m.burnTime; }
       else if (id === E.ACID) dmg += 0.5 * m.acidDmg;
       else if (id === E.ELEC) dmg += 1.2;
       else if (id === E.EWATER) dmg += 0.7;
@@ -168,7 +169,8 @@ function updatePlayer() {
     Math.max(0, Math.min(SIM_H - 1, Math.round(player.y + player.h / 2))));
   let target = warmthTarget(ambient);
   if (player.burning > 0) target = 110;                 // on fire = plenty warm
-  else if (touchedWater && ambient < 20) target -= 15;  // wind-chill when wet
+  else if (touchedWater && ambient < 20) target -= 15;  // wind-chill in cold water
+  else if (touchedWater && target > 55) target = 55;    // a hot pool keeps you cool
   target = Math.max(-5, Math.min(120, target));
   const rate = target < player.warmth ? (touchedWater ? 0.06 : 0.03) : 0.12;
   player.warmth = Math.max(-5, Math.min(110, player.warmth + (target - player.warmth) * rate));

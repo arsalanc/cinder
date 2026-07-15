@@ -306,9 +306,89 @@ The HUD shows the temperature under the cursor next to the biome name.
 Depths 3 and 6 are **guardian levels**: no shards — the portal opens when
 the boss dies (HP bar top-center, +30 hp and full mana on the kill).
 - **Magma Worm** (D3): tunnels through terrain straight at you, trails
-  lava, immune to fire — but sizzles hard in water. Kite it through lakes.
+  lava, immune to fire. Its molten shell deflects *all* direct damage —
+  quench it (see the cycle below) to crack it open.
 - **Tempest** (D6): storm elemental that hurls arcing electric globs and
   electrifies water around itself. Don't fight it wet.
+
+## Boss arenas & phases (done)
+
+Boss depths are now a **purpose-built chamber** (`generateBossChamber` in
+worldgen.js) instead of a random cave — bounded by indestructible WALL so the
+boss can't tunnel out, with diggable rock, cover pillars, and a guaranteed
+water reservoir. Seed-varied but always containing the fight's ingredients.
+Player spawns on the left shelf, portal + boss on the right, reservoir
+between. `beginLevel` places all three explicitly and drops trash mobs for a
+focused duel.
+
+Both bosses now run a **cycle → forced interaction → punish window** loop
+(Mario-boss structure), each rooted in the element sim. Shared beats: an
+EXPOSED boss takes 2× damage, deals no contact damage, and can be
+**stomped** — land on it for a 44-point crunch and a bounce clear. Phase
+breaks (0.66/0.33 HP, pips on the bar) are invulnerable set-pieces, not DPS
+races. The boss bar shows a one-line state hint so the rules teach
+themselves.
+
+**Magma Worm — the quench cycle** (armor 1: direct damage does *nothing*
+while it's shelled; water deals no damage either — it's the key, not a DPS
+tool):
+- Burrowing chase with lava trail; later phases are faster, lay more lava,
+  and radiate heat into the temperature field (heatstroke clock; the hot
+  reservoir stays a warmth refuge).
+- On a cadence it telegraphs (smoke jets crack the ground) then **BREACHES**
+  in a ballistic leap at where you stand. Splashdown in water → **thermal
+  shock quench**: steam burst, shell cracks, EXPOSED. Dry landing → crater +
+  lava-splash slam, and the cycle repeats. Bait the arc over the reservoir.
+- Soaking it heavily while it tunnels (wet ≥ 8) also quenches it — Water
+  Jet forces the window but never melts it.
+- **Phase break: MAGMA SURGE** — it dives deep (invulnerable) and erupts
+  telegraphed geysers (smoke vents, then lava fountains) while the reservoir
+  partially boils away: quench ammo gets scarcer every phase.
+
+**Tempest — the capacitor cycle** (armor 0.7 while charged):
+- Real steering: no line of sight → it **climbs over cover** (no more
+  sulking behind pillars) and only throws arc globs down a clear lane. Its
+  charge bleeds into water well below its hover height — floor puddles go
+  live under the fight.
+- **CHARGE** (locks in place, strobing, crackling — get behind a pillar) →
+  **NOVA** (2+phase lightning bolts bracket the player; the arena's
+  metal-capped pillars are lightning rods that intercept) → **SPENT**: it
+  falls out of the air, dim, aura off, harmless — 2× damage + stompable.
+- Dousing it with fresh water **short-circuits** it into the window early,
+  but the splash arcs back live (EWATER) around it.
+- **Phase break: STORM SQUALL** — it rides to the ceiling (invulnerable)
+  and rains real water plus stray bolts: more electrified floor *and* more
+  quench ammo. Its arena variant: higher ceiling, taller metal-capped
+  pillars, smaller starting pool (the squalls add more), temperate ambient.
+
+The whole design is mechanics the player already knows — quenching
+(molten+water), conduction, electrified water — no hidden boss rules.
+
+## Molten metal — the casting loop (done)
+
+Metal now completes its phase story (29 elements). **Molten** is a white-hot,
+denser-than-lava liquid with a full fabrication loop:
+
+- **Smelt**: sustained direct lava contact slowly melts metal (a deliberate
+  crawl — a furnace takes real time, and a stray drip only pits a wall).
+  Molten also melts adjacent metal at the same rate.
+- **Pour**: it flows like a heavy liquid, emits furnace heat, ignites fuel,
+  and burns like lava (fireproof creatures shrug it off).
+- **Cast**: away from heat it solidifies back into *real conductive METAL*
+  (threshold 45°, higher than lava→stone — pours set quickly and can't creep).
+  **Quench** with water for an instant set (molten + water → metal + steam,
+  mirroring lava + water → stone). You can literally pour a wire or a wall.
+- Big pours self-heat and stay workable; thin castings set. Deep pools
+  **crust over** when flooded — the shell insulates a still-molten interior,
+  exactly like a real foundry.
+
+**The run-mode hook**: an always-running generator eventually melts its own
+housing (its lava heart eats the shell) — Rusted Works machinery decays into
+hazards over time. Tuning that fell out: liquid metal counts as metal for
+heat conduction (a half-melted rod still carries furnace heat through its own
+melt pool), a 1-cell rod dipped in lava now erodes through — build thicker
+electrodes — and thermoelectric output was raised so a live generator
+visibly zaps its coolant basin every few seconds.
 
 ## Industry elements (done)
 

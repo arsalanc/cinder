@@ -30,9 +30,14 @@ choice of **1-of-3 synergies** before the next, deeper level. Reach and clear
 - **Essence shards** — the portal starts dormant. Each level scatters 2–4
   shards in far-apart pockets; collect them all to wake it. Digging straight
   to the exit gains nothing — the route *is* the level.
-- **Bosses** guard depths 3 and 6 instead of shards: the portal opens when
-  the boss dies (and rewards +30 HP and full mana). See the
-  [Bestiary](bestiary.md).
+- **Bosses** guard depths 3 and 6 instead of shards, in a purpose-built
+  **arena** (a walled chamber with a water reservoir). The portal opens when
+  the boss dies (rewarding +30 HP and full mana). Bosses fight in **phases**
+  (marked on their HP bar) and periodically **surface into a vulnerable
+  window** — they glow gold, stop attacking, and take double damage. That's
+  your cue to commit. The **Magma Worm** superheats the arena as it weakens,
+  so the water reservoir becomes both its weakness (it sizzles in it) and
+  your refuge from heatstroke. See the [Bestiary](bestiary.md).
 - **Synergies** stack for the run and some are locked behind milestones
   (best depth, wins, kills). Full list in [Wand & Synergies](spells.md).
 - **Dig Blast** is always in your loadout and mana regenerates, so you can

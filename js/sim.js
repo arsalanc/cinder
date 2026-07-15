@@ -54,10 +54,11 @@ let ambientChill = 0; // global offset, driven by weather (cold snaps)
 
 // per-element heat emission into the local temp cell, per temp update
 const HEAT = new Float32Array(NUM_ELEMENTS);
-HEAT[E.FIRE]  =  1.4;
-HEAT[E.LAVA]  =  2.2;
-HEAT[E.STEAM] =  0.25;
-HEAT[E.ELEC]  =  0.3;
+HEAT[E.FIRE]   = 1.4;
+HEAT[E.LAVA]   = 2.2;
+HEAT[E.MOLTEN] = 2.2;
+HEAT[E.STEAM]  = 0.25;
+HEAT[E.ELEC]   = 0.3;
 // cold emission is much gentler than heat: a solid ice block chills its own
 // air toward freezing, but can't out-refrigerate a lava pool one cell over
 HEAT[E.ICE]   = -0.15;
@@ -77,6 +78,9 @@ function updateTemperature() {
       const h = HEAT[g];
       if (h > 0) {
         temp[trow + (x >> 2)] += h;
+        // liquid metal conducts like the solid — a half-melted rod still
+        // carries its furnace heat (the melt pools where the rod was)
+        if (g === E.MOLTEN) _metalMask[trow + (x >> 2)] = 1;
       } else if (h < 0) {
         // cold sources buffer their cell toward freezing but never chill it
         // below 0 — otherwise a frozen-over pool self-refrigerates in a
@@ -222,6 +226,13 @@ function stepLiquid(i, x, y, id) {
   // lava exposed to deep cold skins over into stone
   if (id === E.LAVA && !worldSettling && tempAt(x, y) < 5 && rand() < 0.008) {
     setCell(i, E.STONE);
+    return;
+  }
+  // molten metal solidifies once it leaves the heat — back into real METAL
+  // (higher threshold than lava: it stays liquid only while actively heated,
+  // so a poured casting sets quickly and can't creep across the map)
+  if (id === E.MOLTEN && !worldSettling && tempAt(x, y) < 45 && rand() < 0.02) {
+    setCell(i, E.METAL);
     return;
   }
   // live water conducts a DECAYING charge into neighboring water — each hop
@@ -772,7 +783,9 @@ function simStep() {
         case T.POWDER: stepPowder(i, x, y, id); break;
         case T.LIQUID:
           stepLiquid(i, x, y, id);
-          if (id === E.LAVA && !worldSettling && rand() < 0.4) igniteNeighbors(i, x, y);
+          if ((id === E.LAVA || id === E.MOLTEN) && !worldSettling && rand() < 0.4) {
+            igniteNeighbors(i, x, y);
+          }
           break;
         case T.GAS:    stepGas(i, x, y, id); break;
         case T.FIRE:   stepFire(i, x, y, id); break;
@@ -807,9 +820,10 @@ function simStep() {
             }
           } else if (id === E.METAL && !worldSettling) {
             // thermoelectric: hot metal sheds sparks — a rod dipped in lava
-            // is a geothermal generator (cold metal is inert)
+            // is a geothermal generator (cold metal is inert). Rate is tuned
+            // so a running generator visibly zaps its basin every few seconds
             const ct = tempAt(x, y);
-            if (ct > 60 && rand() < (ct - 60) * 0.00004) {
+            if (ct > 60 && rand() < (ct - 60) * 0.0001) {
               const spots = [
                 y > 0 ? i - SIM_W : -1,
                 x > 0 ? i - 1 : -1,

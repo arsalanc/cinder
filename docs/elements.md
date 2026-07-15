@@ -48,6 +48,7 @@ reference; see the [Player Guide](player-guide.md) for how to use them.
 | Fungus | Static | 100 | 8% | — | dissolves in acid; burns for 70 |
 | Fish | Fauna | 35 | — | 300–380 | dissolves in acid |
 | Moth | Fauna | 20 | 45% | 500–700 | dissolves in acid; burns for 25 |
+| Molten | Liquid | 48 | — | — | — |
 
 ## Reactions
 
@@ -67,10 +68,15 @@ per adjacency check; temperature gates growth reactions (see the
 | Hydrogen + Fire | Steam + Fire | 40% | — |
 | Ice + Fire | Water + Fire | 15% | — |
 | Ice + Lava | Water + Lava | 50% | — |
+| Lava + Metal | Lava + Molten | 0.01% | — |
 | Lava + Sand | Lava + Glass | 8% | — |
 | Lava + Water | Stone + Steam | 80% | — |
 | Live Water + Live Water | Hydrogen + Live Water | 0.08% | — |
 | Metal + Acid | Hydrogen + Acid | 3% | — |
+| Metal + Lava | Molten + Lava | 0.01% | — |
+| Metal + Molten | Molten + Molten | 0.01% | — |
+| Molten + Metal | Molten + Molten | 0.01% | — |
+| Molten + Water | Metal + Steam | 80% | — |
 | Oil + Electric | Fire | 40% | — |
 | Plant + Fire | Steam + Fire | 4% | — |
 | Sand + Lava | Glass + Lava | 8% | — |
@@ -85,6 +91,7 @@ per adjacency check; temperature gates growth reactions (see the
 | Water + Gunpowder | Water + Ash | 2% | — |
 | Water + Ice | Ice + Ice | 0.2% | — |
 | Water + Lava | Steam + Stone | 80% | — |
+| Water + Molten | Steam + Metal | 80% | — |
 | Water + Plant | Plant + Plant | 2% | ≥ 5° |
 | Water + Seed | Plant | 1% | ≥ 5° |
 | Wood + Fungus | Fungus + Fungus | 0.06% | — |
