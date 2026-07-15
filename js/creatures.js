@@ -58,6 +58,7 @@ const CREATURE_TYPES = {
   tempest: { // storm capacitor: charge → nova → falls SPENT; water shorts it
     w: 5, h: 5, hp: 240, speed: 0.42, fly: true, storm: true, contactDmg: 12,
     color: '#9adcff', sight: 400, boss: true, elecAura: true, armor: 0.7,
+    fireImmune: true, // fire can't cling to a being of wind and rain
     ranged: { cooldown: 85, speed: 2.0, dmg: 8, kind: 'elec' },
   },
 };
@@ -270,6 +271,9 @@ function updateCreatures() {
         setCell(idx(hx, hy), E.FIRE);
       }
     }
+    // bosses: shell/charge armor applies to the environment too — no chipping
+    // a guardian to death with a hose of hazards; the windows ARE the fight
+    if (t.boss && !(c.exposedT > 0)) dmg *= 1 - (t.armor || 0);
     c.hp -= dmg;
     if (c.hp <= 0) { killCreature(i); continue; }
 
@@ -323,7 +327,12 @@ function updateCreatures() {
       if (c.surfaceCd === undefined) {
         c.surfaceCd = 220; c.exposedT = 0; c.breachTel = 0; c.airborne = false;
         c.slamT = 0; c.surgeT = 0; c.phaseDone = phase; c.geysers = [];
+        c.reheatT = 0;
       }
+      // quenching needs a HOT shell: after a window the shell is already
+      // cooled, so water does nothing until it reheats — no chain-quenching
+      // it in the pool forever
+      if (c.reheatT > 0) c.reheatT--;
       const bx = Math.round(c.x + c.w / 2), by = Math.round(c.y + c.h / 2);
       const windowLen = phase === 3 ? 80 : phase === 2 ? 100 : 120;
       const cadence = phase === 3 ? 130 : phase === 2 ? 180 : 230;
@@ -376,7 +385,7 @@ function updateCreatures() {
         if (rand() < 0.2 && by > 1 && grid[idx(bx, by - 1)] === E.EMPTY) {
           setCell(idx(bx, by - 1), E.STEAM); // shell venting the quench off
         }
-        if (c.exposedT === 0) c.surfaceCd = cadence;
+        if (c.exposedT === 0) { c.surfaceCd = cadence; c.reheatT = 280; }
         continue;
       }
 
@@ -397,7 +406,7 @@ function updateCreatures() {
         }
         if (c.vy < 0) {
           digCircle(bx, by, 3); // erupting up through whatever's in the way
-        } else if (c.wet >= 3) {
+        } else if (c.wet >= 3 && !(c.reheatT > 0)) {
           quenchBoss(c, windowLen); // splashdown — thermal shock
           continue;
         } else if (c.y + c.h >= SIM_H - 5 ||
@@ -435,11 +444,21 @@ function updateCreatures() {
 
       // soaking it while it tunnels also cracks the shell (thermal shock) —
       // Water Jet is a tool to force the window, never a way to melt it down
-      if (c.wet >= 8) { quenchBoss(c, windowLen); continue; }
+      if (c.wet >= 8 && !(c.reheatT > 0)) { quenchBoss(c, windowLen); continue; }
 
       // --- BURROWING chase (faster the weaker it gets)
       const spd = t.speed * (phase === 3 ? 1.45 : phase === 2 ? 1.15 : 1);
-      if (dist > 3) { c.x += dx / dist * spd; c.y += dy / dist * spd; }
+      let sx = dx / dist, sy = dy / dist;
+      // a hot shell FEARS the quench: it dives under pools in its path
+      // instead of swimming through them (bait the breach to get it wet)
+      if (!(c.reheatT > 0)) {
+        const fx = Math.round(bx + sx * 7), fy = Math.round(by + sy * 7);
+        if (fx > 1 && fx < SIM_W - 1 && fy > 1 && fy < SIM_H - 1 &&
+            (grid[idx(fx, fy)] === E.WATER || c.wet > 0)) {
+          sy = 0.9; sx = Math.sign(sx || c.dir) * 0.45;
+        }
+      }
+      if (dist > 3) { c.x += sx * spd; c.y = Math.min(SIM_H - 10, c.y + sy * spd); }
       digCircle(bx, by, 3);
       // lava trail — much heavier late, which heats the arena via the temp field
       const lavaP = t.lavaTrail * (phase === 3 ? 3.2 : phase === 2 ? 2.2 : 1);
@@ -567,11 +586,23 @@ function updateCreatures() {
       // --- hover: climb whenever cover breaks the line to the player
       if (--c.chargeCd <= 0 && dist < 220) { c.chargingT = 65; continue; }
       const los = creatureLOS(ccx, ccy, pcx, pcy);
+      const headroom = !creatureCollides(c, c.x, c.y - 1.5);
       let tvx, tvy;
       if (chase && !los) {
-        tvx = dx / dist * t.speed * 0.5;
-        tvy = -t.speed; // rise until it can see you again
+        // blocked sight: climb over the cover — but if the ceiling stops the
+        // climb (or it's dragged on too long), swoop down at you instead of
+        // pinning itself against the roof
+        c.noLosT = (c.noLosT || 0) + 1;
+        if (headroom && c.noLosT < 140) {
+          tvx = dx / dist * t.speed * 0.5;
+          tvy = -t.speed; // rise until it can see you again
+        } else {
+          tvx = dx / dist * t.speed;
+          tvy = Math.max(0.25, dy / dist * t.speed);
+          if (c.noLosT > 280) c.noLosT = 0; // then try climbing again
+        }
       } else if (chase) {
+        c.noLosT = 0;
         tvx = dx / dist * t.speed;
         tvy = Math.max(-t.speed, Math.min(t.speed, (pcy - 22 - ccy) * 0.03));
       } else {
@@ -583,7 +614,11 @@ function updateCreatures() {
       c.vx += (tvx - c.vx) * 0.1;
       c.vy += (tvy - c.vy) * 0.1;
       if (!creatureCollides(c, c.x + c.vx, c.y)) c.x += c.vx;
-      else { c.vx = 0; c.vy = Math.min(c.vy, -t.speed * 0.8); } // wall: climb
+      else { // wall: climb if there's headroom, otherwise duck under
+        c.vx = 0;
+        c.vy = headroom ? Math.min(c.vy, -t.speed * 0.8)
+                        : Math.max(c.vy, t.speed * 0.8);
+      }
       if (!creatureCollides(c, c.x, c.y + c.vy)) c.y += c.vy;
       else c.vy = 0;
       // storm pressure: its charge bleeds into water well below its hover

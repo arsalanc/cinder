@@ -341,6 +341,11 @@ tool):
   lava-splash slam, and the cycle repeats. Bait the arc over the reservoir.
 - Soaking it heavily while it tunnels (wet ≥ 8) also quenches it — Water
   Jet forces the window but never melts it.
+- **Reheat rule**: quenching needs a *hot* shell. After a window the shell
+  is already cooled (`reheatT` ≈ 4.5s), so sitting in the pool can't
+  chain-quench it — and while hot it *fears* the water, diving under pools
+  in its path instead of swimming through them. Baiting the breach is the
+  reliable quench.
 - **Phase break: MAGMA SURGE** — it dives deep (invulnerable) and erupts
   telegraphed geysers (smoke vents, then lava fountains) while the reservoir
   partially boils away: quench ammo gets scarcer every phase.
@@ -356,6 +361,11 @@ tool):
   falls out of the air, dim, aura off, harmless — 2× damage + stompable.
 - Dousing it with fresh water **short-circuits** it into the window early,
   but the splash arcs back live (EWATER) around it.
+- Fire-immune (a being of wind and rain), and boss armor applies to
+  *environmental* damage too — no chipping a guardian to death with a
+  flamethrower; the windows are the fight.
+- If a climb is roofed out (or drags on), it **swoops down** at you instead
+  of pinning itself against the ceiling.
 - **Phase break: STORM SQUALL** — it rides to the ceiling (invulnerable)
   and rains real water plus stray bolts: more electrified floor *and* more
   quench ammo. Its arena variant: higher ceiling, taller metal-capped
