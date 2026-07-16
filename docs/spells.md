@@ -18,6 +18,20 @@ Cooldown and range are in sim frames (60 = one second).
 | Flamethrower | 3 | 2 | 4 | Short-range torrent — a fraction of spark's reach, ~5× the damage. |
 | Arc Bolt | 14 | 18 | 8 | Electrifies water and open air into a lethal zone. |
 
+### Evolutions
+
+A spell **evolves** once your run holds two synergies carrying its
+matching tag (Arc Bolt instead evolves through the Stormcore trophy).
+
+| Spell | Tag ×2 | Evolves into |
+| --- | --- | --- |
+| Spark Bolt | fire | Meteor Bolt |
+| Water Jet | frost | Glacier Jet |
+| Dig Blast | mobility | Tunnel Charge |
+| Powder Bomb | blast | Powder Keg |
+| Acid Spit | acid | Dissolver |
+| Flamethrower | fire | Dragon's Breath |
+
 ## Synergies
 
 Between levels you pick one of three synergies. Some are locked until a

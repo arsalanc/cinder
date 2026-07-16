@@ -722,6 +722,7 @@ function stepReactions(i, x, y, id) {
 // --- explosions -----------------------------------------------------------
 
 function explode(cx, cy, radius) {
+  if (simHooks.explodeAt) simHooks.explodeAt(cx, cy, radius); // game-layer ears
   const r2 = radius * radius;
   for (let dy = -radius; dy <= radius; dy++) {
     const y = cy + dy;

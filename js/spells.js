@@ -6,33 +6,100 @@
 
 'use strict';
 
-// impact(x, y, boost) — boost is wandMods.radiusBonus from composition mods
+// impact(x, y, boost) — boost is wandMods.radiusBonus from composition mods.
+// A spell's `evo` block is its EVOLVED form: once the run holds `need` (2)
+// synergies carrying the evo's tag, spellForm() overlays these fields onto
+// the base spell — new name, icon, and impact. (Arc Bolt has no tag evo:
+// the Stormcore trophy is its evolution.)
 const SPELLS = {
   spark: {
     name: 'Spark Bolt', color: '#ffb347', sfx: 'zap', damage: 10,
     cost: 10, cooldown: 12, speed: 2.6, gravity: 0.015, life: 90,
     impact(x, y, b = 0) { splash(x, y, 2 + b, E.FIRE); },
+    evo: {
+      tag: 'fire', name: 'Meteor Bolt', color: '#ff8c5c', iconKey: 'meteor',
+      damage: 16, speed: 2.4, gravity: 0.03,
+      impact(x, y, b = 0) {
+        splash(x, y, 3 + b, E.FIRE);
+        const j = idx(x, Math.max(1, y - 1));
+        if (grid[j] === E.EMPTY) setCell(j, E.LAVA); // a molten core
+      },
+    },
   },
   water: {
     name: 'Water Jet', color: '#4aa3ff', sfx: 'spray', damage: 2,
     cost: 2, cooldown: 2, speed: 2.1, gravity: 0.05, life: 45,
     count: 3, spread: 0.22,
     impact(x, y, b = 0) { splash(x, y, 1 + b, E.WATER); },
+    evo: {
+      tag: 'frost', name: 'Glacier Jet', color: '#bfe4ff', iconKey: 'glacier',
+      damage: 4,
+      impact(x, y, b = 0) {
+        splash(x, y, 1 + b, E.WATER);
+        // flash-freeze the splash's surface (Frost Aura's rule, weaponized —
+        // and like the aura, never inside the player)
+        const bx0 = Math.floor(player.x) - 1, bx1 = Math.ceil(player.x + player.w);
+        const by0 = Math.floor(player.y) - 1, by1 = Math.ceil(player.y + player.h);
+        const r = 2 + b;
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const cx = x + dx, cy = y + dy;
+            if (cx < 1 || cx >= SIM_W - 1 || cy < 2 || cy >= SIM_H - 1) continue;
+            if (cx >= bx0 && cx <= bx1 && cy >= by0 && cy <= by1) continue;
+            const j = idx(cx, cy);
+            if (grid[j] === E.WATER && grid[j - SIM_W] === E.EMPTY && rand() < 0.7) {
+              setCell(j, E.ICE);
+            }
+          }
+        }
+      },
+    },
   },
   dig: {
     name: 'Dig Blast', color: '#d8c9a8', sfx: 'dig', damage: 6,
     cost: 4, cooldown: 9, speed: 2.4, gravity: 0, life: 11, // life caps range
     impact(x, y, b = 0) { digCircle(x, y, 3 + b); },
+    evo: {
+      tag: 'mobility', name: 'Tunnel Charge', color: '#e8d9b8', iconKey: 'tunnel',
+      cost: 3, cooldown: 3,
+      impact(x, y, b = 0) { digCircle(x, y, 5 + b); },
+    },
   },
   bomb: {
     name: 'Powder Bomb', color: '#ff6a4a', sfx: 'lob', damage: 18,
     cost: 28, cooldown: 50, speed: 2.0, gravity: 0.045, life: 240,
     impact(x, y, b = 0) { explode(x, y, ((7 + 2 * b) * explosionScale) | 0); playSfx('explosion'); },
+    evo: {
+      tag: 'blast', name: 'Powder Keg', color: '#ff4a2a', iconKey: 'keg',
+      damage: 24,
+      impact(x, y, b = 0) {
+        explode(x, y, ((9 + 2 * b) * explosionScale) | 0);
+        // scatter burning powder into the crater: secondary pops
+        for (let k = 0; k < 12; k++) {
+          const sx = x + ((rand() * 13) | 0) - 6, sy = y + ((rand() * 13) | 0) - 6;
+          if (sx > 1 && sx < SIM_W - 1 && sy > 1 && sy < SIM_H - 1 &&
+              grid[idx(sx, sy)] === E.EMPTY) setCell(idx(sx, sy), E.GUNPOWDER);
+        }
+        splash(x, y, 1, E.FIRE);
+        playSfx('explosion');
+      },
+    },
   },
   acid: {
     name: 'Acid Spit', color: '#a0e83c', sfx: 'spit', damage: 9,
     cost: 9, cooldown: 12, speed: 2.2, gravity: 0.03, life: 90,
     impact(x, y, b = 0) { splash(x, y, 2 + b, E.ACID); },
+    evo: {
+      tag: 'acid', name: 'Dissolver', color: '#c8ff3c', iconKey: 'dissolver',
+      damage: 13,
+      impact(x, y, b = 0) {
+        splash(x, y, 3 + b, E.ACID);
+        for (let k = -1; k <= 1; k++) { // the reaction liberates hydrogen
+          const j = idx(Math.max(1, Math.min(SIM_W - 2, x + k)), Math.max(1, y - 2));
+          if (grid[j] === E.EMPTY) setCell(j, E.HYDROGEN);
+        }
+      },
+    },
   },
   flame: { // Spark Bolt's opposite: a fraction of the range, ~5x the DPS,
            // heavy mana drain, and it fills the air with real fire
@@ -40,6 +107,17 @@ const SPELLS = {
     cost: 3, cooldown: 2, speed: 1.8, gravity: -0.005, life: 9, // life caps range (~14 cells)
     count: 2, spread: 0.3,
     impact(x, y, b = 0) { splash(x, y, 1 + b, E.FIRE); },
+    evo: {
+      tag: 'fire', name: "Dragon's Breath", color: '#ff5a1c', iconKey: 'dragon',
+      damage: 5, life: 14, // longer tongue (~22 cells)
+      impact(x, y, b = 0) {
+        splash(x, y, 1 + b, E.FIRE);
+        if (rand() < 0.12) { // it drips molten rock at the far end
+          const j = idx(x, Math.min(SIM_H - 2, y + 1));
+          if (grid[j] === E.EMPTY) setCell(j, E.LAVA);
+        }
+      },
+    },
   },
   arc: {
     name: 'Arc Bolt', color: '#f0f4ff', sfx: 'arc', damage: 8,
@@ -155,10 +233,46 @@ function digCircle(cx, cy, r) {
   }
 }
 
+// --- spell evolutions --------------------------------------------------------
+// Count how many taken synergies carry a tag (the build's gravity)
+function spellTagCount(tag) {
+  if (typeof run === 'undefined' || !run.active) return 0;
+  let n = 0;
+  for (const name of run.mods) {
+    const m = MODIFIERS.find(mm => mm.name === name);
+    if (m && m.tags && m.tags.includes(tag)) n++;
+  }
+  return n;
+}
+
+// The live form of a spell: base, or base overlaid with its evo block once
+// the run holds enough matching-tag synergies. Derived purely from run.mods,
+// so replays evolve identically.
+function spellForm(key) {
+  const sp = SPELLS[key];
+  if (!sp.evo) return sp;
+  return spellTagCount(sp.evo.tag) >= (sp.evo.need || 2)
+    ? Object.assign({}, sp, sp.evo) : sp;
+}
+
+// choice-overlay badge: which held spells would this pick evolve?
+function evolutionsCompletedBy(mod) {
+  if (typeof run === 'undefined' || !run.active || !mod.tags) return [];
+  const out = [];
+  for (const key of wand.spells) {
+    const sp = SPELLS[key];
+    if (!sp.evo || !mod.tags.includes(sp.evo.tag)) continue;
+    if (spellTagCount(sp.evo.tag) === (sp.evo.need || 2) - 1) {
+      out.push(sp.name + ' → ' + sp.evo.name);
+    }
+  }
+  return out;
+}
+
 function castSelectedSpell(tx, ty) {
   if (wand.cooldown > 0) return;
   const key = wand.spells[wand.sel];
-  const sp = SPELLS[key];
+  const sp = spellForm(key);
   if (wand.mana < sp.cost) return;
   wand.mana -= sp.cost;
   const cd = Math.max(1, Math.round(sp.cooldown * wandMods.cooldownMult));
@@ -196,7 +310,7 @@ function updateSpells() {
 
   for (let p = projectiles.length - 1; p >= 0; p--) {
     const pr = projectiles[p];
-    const sp = SPELLS[pr.key];
+    const sp = spellForm(pr.key);
     pr.vy += sp.gravity;
     let hit = false;
     const steps = Math.max(1, Math.ceil(Math.max(Math.abs(pr.vx), Math.abs(pr.vy))));
@@ -243,7 +357,7 @@ function drawProjectiles() {
   const cw = displayCanvas.width / camera.w;
   const ch = displayCanvas.height / camera.h;
   for (const pr of projectiles) {
-    displayCtx.fillStyle = SPELLS[pr.key].color;
+    displayCtx.fillStyle = spellForm(pr.key).color;
     displayCtx.fillRect((pr.x - camera.x - 0.6) * cw, (pr.y - camera.y - 0.6) * ch,
                         1.2 * cw, 1.2 * ch);
   }
@@ -316,6 +430,61 @@ const ICON_PX = {
     '..ww....',
     '.ww.....',
     '.w......'],
+  // --- evolved forms ---------------------------------------------------------
+  meteor: [
+    '......oo',
+    '.....oy.',
+    '....oy..',
+    '..rroo..',
+    '.rRRRr..',
+    '.rRyRr..',
+    '.rRRRr..',
+    '..rrr...'],
+  glacier: [
+    '...ii...',
+    '..iIIi..',
+    '..iIWi..',
+    '.iIIWIi.',
+    '.iIWIIi.',
+    '..iIIi..',
+    '..bBBb..',
+    '.bBBBBb.'],
+  tunnel: [
+    '..ss....',
+    '.sMMs...',
+    'sMMMMs..',
+    'sMmmMs..',
+    '.sMMs.h.',
+    '..ss.hh.',
+    '....hh..',
+    '...hh...'],
+  keg: [
+    '....y...',
+    '.dddw...',
+    'dDDDDd..',
+    'dDrrDd..',
+    'dDrrDd..',
+    'dDDDDd..',
+    'dDDDDd..',
+    '.dddd...'],
+  dissolver: [
+    '..G..G..',
+    '.G.GG.G.',
+    '..gGGg..',
+    '.gGGGGg.',
+    'gGGWGGGg',
+    'gGGGGGGg',
+    '.gGGGGg.',
+    '..gggg..'],
+  dragon: [
+    '.rr.....',
+    'rRRr..o.',
+    'rRoRoo..',
+    '.Rooyoo.',
+    '.Royyyo.',
+    'rRoywyo.',
+    'rRRoyo..',
+    '.rr.o...'],
 };
 
 const ICON_COLORS = {
@@ -619,12 +788,13 @@ function updateSpellHUD() {
   if (!bar) return;
   bar.innerHTML = '';
   wand.spells.forEach((key, i) => {
+    const form = spellForm(key); // evolved spells show their evolved face
     const slot = document.createElement('div');
     slot.className = 'slot' + (i === wand.sel ? ' sel' : '');
-    slot.title = SPELLS[key].name;
+    slot.title = form.name;
     const cv = document.createElement('canvas');
     cv.width = 32; cv.height = 32;
-    drawSpellIcon(cv, key);
+    drawSpellIcon(cv, form.iconKey || key);
     slot.appendChild(cv);
     const k = document.createElement('span');
     k.className = 'key';
@@ -645,7 +815,7 @@ function updateHotbar() {
   if (!bar) return;
   const slots = bar.children;
   for (let i = 0; i < slots.length; i++) {
-    const sp = SPELLS[wand.spells[i]];
+    const sp = spellForm(wand.spells[i]);
     slots[i].classList.toggle('sel', i === wand.sel);
     slots[i].classList.toggle('nomana', wand.mana < sp.cost);
     const cd = slots[i].lastElementChild;

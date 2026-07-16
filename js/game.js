@@ -24,7 +24,19 @@ const run = {
 const portal = { x: 0, y: 0 };
 // optional per-depth side objective: a buried, hazard-flooded glass vault;
 // touching the relic inside grants an extra synergy pick
-const relic = { x: 0, y: 0, present: false, taken: false };
+const relic = { x: 0, y: 0, present: false, taken: false, trap: null };
+
+// a blast that reaches an untaken relic destroys it — a sprung powder trap
+// costs you the prize (sim core reports every explosion through this hook)
+simHooks.explodeAt = (cx, cy, r) => {
+  if (!relic.present || relic.taken) return;
+  const dx = relic.x - cx, dy = relic.y - cy;
+  if (dx * dx + dy * dy <= (r + 1) * (r + 1)) {
+    relic.present = false;
+    playSfx('squish');
+    updateRunHUD();
+  }
+};
 
 // --- meta-progression: persists across sessions via localStorage ------------
 
@@ -271,6 +283,7 @@ function placeShards(reach) {
 function placeRelic() {
   relic.present = false;
   relic.taken = false;
+  relic.trap = null;
   const HAZARD = {
     'Ice Caves': E.ICE, 'Volcanic Depths': E.LAVA,
     'Oil Caverns': E.OIL, 'Rusted Works': E.ACID,
@@ -292,12 +305,32 @@ function placeRelic() {
     if (ddx * ddx + ddy * ddy < 70 * 70) continue;
     const dp = (cx - portal.x) * (cx - portal.x) + (cy - portal.y) * (cy - portal.y);
     if (dp < 25 * 25) continue;
-    // stamp: glass shell (you can SEE the prize), hazard-flooded interior
+    // trap roll — depths 1-2 stay clean while the mechanic teaches itself;
+    // the glass shell makes every trap honest (you can SEE what's inside)
+    relic.trap = null;
+    if (run.depth >= 3) {
+      const tr = rand();
+      if (tr < 0.25) relic.trap = 'powder';
+      else if (tr < 0.45 && run.depth >= 4) relic.trap = 'nest';
+    }
+    // stamp: glass shell, then an interior to match —
+    //   plain:  flooded with the biome's hazard
+    //   powder: a gunpowder lining (any spark chains; the blast can destroy
+    //           the relic — flood it first: wet powder turns to ash)
+    //   nest:   a dormant fungus clutch glowing through the glass; taking
+    //           the relic wakes the guards
     const fill = HAZARD[BIOMES[worldBiomeMap[idx(cx, cy)]].name] || E.WATER;
     for (let dy = -3; dy <= 3; dy++) {
       for (let dx = -4; dx <= 4; dx++) {
         const edge = Math.abs(dx) === 4 || Math.abs(dy) === 3;
-        setCell(idx(cx + dx, cy + dy), edge ? E.GLASS : fill);
+        let id;
+        if (edge) id = E.GLASS;
+        else if (relic.trap === 'powder') {
+          id = (Math.abs(dx) === 3 || Math.abs(dy) === 2) ? E.GUNPOWDER : E.EMPTY;
+        } else if (relic.trap === 'nest') {
+          id = (dy === 2 && rand() < 0.75) ? E.FUNGUS : E.EMPTY;
+        } else id = fill;
+        setCell(idx(cx + dx, cy + dy), id);
       }
     }
     setCell(idx(cx, cy), E.EMPTY); // the relic's own cell stays clear
@@ -329,6 +362,20 @@ function updateGame() {
       if (rdx * rdx + rdy * rdy < 12) {
         relic.taken = true;
         playSfx('shard');
+        if (relic.trap === 'nest') {
+          // the clutch wakes: biome guards burst out around the vault
+          const biomeName = BIOMES[worldBiomeMap[idx(relic.x, relic.y)]].name;
+          for (let k = 0; k < 3; k++) {
+            const key = weightedPick(BIOME_SPAWNS[biomeName] || BIOME_SPAWNS['Stone Caverns']);
+            const t = CREATURE_TYPES[key];
+            creatures.push({
+              key, x: relic.x - 3 + k * 2, y: relic.y - t.h, vx: 0, vy: 0,
+              w: t.w, h: t.h, hp: t.hp, dir: (k & 1) ? 1 : -1,
+              burning: 0, hurtFlash: 0, bob: 0, attackCd: 30,
+            });
+          }
+          playSfx('squish');
+        }
         run.choosing = true;
         run.relicChoice = true; // bonus pick: stay on this level
         showChoiceOverlay(rollChoices(3, run.mods));
@@ -431,6 +478,14 @@ function showChoiceOverlay(choices) {
     span.textContent = mod.desc;
     btn.appendChild(b);
     btn.appendChild(span);
+    // this pick would complete a spell evolution: say so on the card
+    const evos = evolutionsCompletedBy(mod);
+    if (evos.length) {
+      const ev = document.createElement('span');
+      ev.className = 'evo-badge';
+      ev.textContent = '⚡ ' + evos.join(' · ');
+      btn.appendChild(ev);
+    }
     btn.addEventListener('click', () => chooseModifier(mod));
     cards.appendChild(btn);
   }

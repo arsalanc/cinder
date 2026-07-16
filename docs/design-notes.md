@@ -343,12 +343,39 @@ boss windows). Re-grounding the power-up pool and the run loop in them:
   the hunt condition until then). Both trophy mods are deliberately
   build-around sidegrades so re-killing bosses never becomes mandatory.
 
-**Batch 3 (candidate ideas):**
+**Batch 3 — trapped vaults & spell evolutions (done):**
+- **Trapped vaults** — from depth 4, ~45% of relic vaults are trapped, and
+  the glass shell makes every trap honest (the interior is literally
+  rendered): **powder-lined** (a gunpowder charge between hazard and glass;
+  the top row settles into a loose heap — any spark chains it, and a blast
+  that reaches the relic destroys it via the new `simHooks.explodeAt` hook;
+  counterplay is chemistry: flood it first, wet powder turns to ash) and
+  **nest** (depth 4+: a dormant fungus clutch glows through the glass;
+  taking the relic wakes three biome guards on top of you — you still get
+  the pick, mid-brawl). Depths 1–2 never trap: the mechanic teaches gently.
+  Reward is identical to a clean vault — traps are the cost of careless
+  extraction, not a jackpot.
+- **Spell evolutions** — each spell carries an `evo` block; once the run
+  holds **two synergies with its tag**, `spellForm()` overlays it: Spark →
+  **Meteor Bolt** (fire; bigger splash + molten core), Water Jet →
+  **Glacier Jet** (frost; flash-freezes the splash surface — Frost Aura's
+  rule weaponized, never inside the player), Flamethrower → **Dragon's
+  Breath** (fire; longer tongue, drips lava), Acid Spit → **Dissolver**
+  (acid; liberates hydrogen), Powder Bomb → **Powder Keg** (blast; scatters
+  burning powder for secondary pops), Dig Blast → **Tunnel Charge**
+  (mobility; radius 5 on a 3-frame cooldown). Arc Bolt's evolution stays
+  the Stormcore trophy. Spell-granting mods count toward their own tag, so
+  Acid Spit + Acid Blood = Dissolver. Evolution is derived purely from
+  `run.mods`, so replays evolve identically; the hotbar swaps to the
+  evolved icon/name, and choice cards that would complete an evolution
+  carry a gold **⚡ evolves** badge. Tag-weighted rolls make evolutions the
+  natural payoff of the build gravity they create.
+
+**Batch 4 (candidate ideas):**
 - Daily-run scoreboard for endless depth reached; ghost replays.
 - Elite affixes (a frost elite in the Oil Caverns, etc.) for cross-biome
-  surprise; relic vault "curses" — some vaults are trapped (gunpowder core).
-- Spell evolutions: a taken spell + matching tag mod upgrades the spell
-  itself (Water Jet → Pressure Lance, Spark Bolt → Chain Arc).
+  surprise.
+- Second-stage evolutions gated on trophies (Meteor Bolt + Wormheart?).
 
 **Known-good accidents to preserve:** Steam Sprite heals off boss-quench
 steam; Demolitionist is deliberately useless against shelled bosses (the
