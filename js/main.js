@@ -154,6 +154,9 @@ function main() {
   soundBtn.addEventListener('click', () => {
     soundBtn.textContent = toggleMute() ? 'Sound: Off' : 'Sound: On';
   });
+  document.getElementById('btn-collection').addEventListener('click', () => {
+    if (!run.choosing) showCollectionOverlay(); // never over a live pick
+  });
   // browsers require a user gesture before audio can start
   window.addEventListener('pointerdown', initAudio, { once: true });
   window.addEventListener('keydown', initAudio, { once: true });
@@ -197,6 +200,7 @@ function main() {
     beginLevel();
   }
   if (location.hash === '#zoom') setSandboxZoom(4); // dev hook: zoomed sandbox view
+  if (location.hash === '#collection') showCollectionOverlay(); // dev: the unlock grid
 
   pauseBtn.addEventListener('click', togglePause);
   document.getElementById('btn-clear').addEventListener('click', () => {

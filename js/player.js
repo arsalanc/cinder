@@ -142,8 +142,8 @@ function updatePlayer() {
       else if (id === E.LAVA) { dmg += 1.1 * m.lavaDmg; player.burning = 240 * m.burnTime; }
       else if (id === E.MOLTEN) { dmg += 1.2 * m.lavaDmg; player.burning = 240 * m.burnTime; }
       else if (id === E.ACID) dmg += 0.5 * m.acidDmg;
-      else if (id === E.ELEC) dmg += 1.2;
-      else if (id === E.EWATER) dmg += 0.7;
+      else if (id === E.ELEC) dmg += 1.2 * m.elecDmg;
+      else if (id === E.EWATER) dmg += 0.7 * m.elecDmg;
       else if (id === E.SMOKE) dmg += 0.015; // choking — mild, but adds up
       const heal = runState.heals[id];
       if (heal) player.hp = Math.min(player.maxHp, player.hp + heal);
@@ -326,6 +326,8 @@ function drawPlayer() {
   // red when overheating
   let body = '#e8e0d0';
   if (player.burning > 0 && (simFrame & 4)) body = '#ff8c3c';
+  // just took a hit (contact damage sets hurtCd 45): red strobe, like burning
+  else if (player.hurtCd > 33 && (simFrame & 2)) body = '#ff4a4a';
   else if (player.warmth < 20) body = (simFrame & 8) ? '#a9d6ff' : '#cfe6ff'; // shiver
   else if (player.warmth > 90) body = '#ffb0a0';
   displayCtx.fillStyle = body;

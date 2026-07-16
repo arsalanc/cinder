@@ -292,18 +292,47 @@ boss windows). Re-grounding the power-up pool and the run loop in them:
 - ~~Tag-weighted rolls~~ — mods carry tags (fire/frost/storm/wand/...);
   `rollChoices` weights toward tags already taken so builds snowball.
 
-**Batch 2 (planned):**
-- **Elites** — one oversized signature enemy per depth 4+, armored with a
-  telegraphed vulnerability window (the boss grammar, miniaturized); kill
-  reward heal + mana.
-- **Relic vaults** — one optional side objective per depth: a buried vault
-  behind a biome-flavored hazard (flooded / frozen / gas-filled), rewarding
-  an extra mod pick. Makes set-pieces destinations, not scenery.
-- **Endless descent** — after the win, keep descending: scaling depths,
-  both bosses recurring with tighter cadences; gives dailies a score axis.
-- **Storm Caller** — weather locked to storm, lightning never strikes near
-  you. **Insulated** — heavy ELEC/EWATER resistance (builds for Rusted
-  Works + the tempest). **Executioner** — vulnerable windows last longer.
+**Batch 2 (done):**
+- ~~**Elites**~~ — depth 4+ levels spawn one oversized biome-signature enemy:
+  0.6 armor floor, 3× hp, 1.5× contact, and a periodic EXPOSED window (2×,
+  smoke-puff telegraph, pulsing gold) — the boss grammar, miniaturized.
+  Unlike a boss it keeps fighting through its window. Kill: +15 hp, +30 mana.
+- ~~**Relic vaults**~~ — one optional glass vault per non-boss depth, buried
+  in solid rock and flooded with the biome's hazard (water / lava / oil /
+  acid / solid ice). Deliberately off the critical path — Dig Blast is the
+  key. Touching the relic grants an extra synergy pick on the spot (`✦` on
+  the HUD). Cramped maps may simply lack one; it's optional.
+- ~~**Endless descent**~~ — the win is banked the moment the depth-6 portal
+  opens; the choice overlay doubles as the victory screen with an **End
+  Run** exit ramp. Descend instead and the run goes endless: `D8/∞`, denser
+  hordes (cap 20), guardians recurring every 3rd depth (9 worm, 12 tempest,
+  alternating) with +6% hp per endless depth (`maxHp` per instance; phase
+  ratios and the boss bar read it).
+- ~~**Storm Caller / Insulated / Executioner**~~ — weather pinned to storm
+  with an 18-column lightning ward (covers the bolt's radius-3 ground
+  splash); ELEC/EWATER damage ×0.15 (wading, not submersion); vulnerability
+  windows ×1.5 via the shared `exposeFor()` helper.
+
+**UI/feedback batch (done):**
+- **Hurt flash** — taking contact damage strobes the player sprite red
+  (same visual language as the burning flash; keyed off the fresh end of
+  the `hurtCd` invulnerability window).
+- **Synergy sprites** — every modifier has an 8×8 pixel icon in the same
+  hand-authored `ICON_PX` language as the spell hotbar (shared palette,
+  `MOD_ICONS` in spells.js; spell-granting mods reuse their spell's glyph
+  so card and hotbar slot read as the same thing). Choice cards at the end
+  of each level now lead with the sprite.
+- **Collection** — a button (and `#collection` dev hook) opens the unlock
+  grid: every synergy as a sprite tile, earned ones in color with tooltip,
+  locked ones blacked out showing only their unlock condition. A test
+  guards that every modifier has a valid icon and no icons are orphaned.
+
+**Batch 3 (candidate ideas):**
+- Daily-run scoreboard for endless depth reached; ghost replays.
+- Elite affixes (a frost elite in the Oil Caverns, etc.) for cross-biome
+  surprise; relic vault "curses" — some vaults are trapped (gunpowder core).
+- Spell evolutions: a taken spell + matching tag mod upgrades the spell
+  itself (Water Jet → Pressure Lance, Spark Bolt → Chain Arc).
 
 **Known-good accidents to preserve:** Steam Sprite heals off boss-quench
 steam; Demolitionist is deliberately useless against shelled bosses (the

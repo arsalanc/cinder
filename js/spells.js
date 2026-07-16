@@ -318,12 +318,229 @@ const ICON_COLORS = {
   h: '#8a5a30', s: '#aab0b8',
   d: '#4a4a56', D: '#26262e',
   g: '#79c62e', G: '#a0e83c',
+  r: '#e2583a', R: '#ff8c5c',           // ember reds
+  i: '#bfe4ff', I: '#e8f6ff',           // frost
+  m: '#8a94a0', M: '#c3ccd6',           // metal
+  p: '#8a63d0', P: '#b48cff',           // arcane purple
+  f: '#e8e0d0',                         // bone / fur
+  c: '#7ee8e0',                         // shard cyan
 };
 
-function drawSpellIcon(cv, key) {
+// synergy card / collection sprites — same 8x8 language as the spell icons.
+// Spell-granting mods reuse the spell's own glyph so the card and the hotbar
+// slot it adds read as the same thing.
+const MOD_ICONS = {
+  'Pyromaniac': [
+    '..o..o..',
+    '.oo.oo..',
+    '.oyooyo.',
+    'ooyyoyo.',
+    'oyywyyoo',
+    'oyww.wyo',
+    '.oyw.wy.',
+    '..oo.o..'],
+  'Fireproof Hide': [
+    '.mmmmmm.',
+    'mMwwwwMm',
+    'mw.oo.wm',
+    'mw.oo.wm',
+    'mww..wwm',
+    '.mw..wm.',
+    '..mwwm..',
+    '...mm...'],
+  'Frost Aura': [
+    '...I....',
+    '.i.I.i..',
+    '..iIi...',
+    'IiIWIiI.',
+    '..iIi...',
+    '.i.I.i..',
+    '...I....',
+    '........'],
+  'Lava Strider': [
+    '..hh....',
+    '..hh....',
+    '..hhh...',
+    '..hhhh..',
+    '.hhhhh..',
+    '.hhhhhh.',
+    'oyooyoyo',
+    'ryryyrry'],
+  'Steam Sprite': [
+    '..WW....',
+    '.WWWW.W.',
+    '..WW.WWW',
+    '.W....W.',
+    '.WWW....',
+    'WWWWW.W.',
+    '.WWW.WWW',
+    '......W.'],
+  'Green Thumb': [
+    '...gG...',
+    '.GG.g.G.',
+    'GGG.gGG.',
+    '.G..gG..',
+    '....g...',
+    '...gg...',
+    'hhhhhhhh',
+    'DhhDDhhD'],
+  'Acid Blood': [
+    '...G....',
+    '...G....',
+    '..GG....',
+    '.GGGG...',
+    'GGrGGG..',
+    'GrrrGG..',
+    '.GGGG...',
+    '..GG....'],
+  'Demolitionist': [
+    '.....y..',
+    '....yw..',
+    '.rrrr...',
+    'rRRRRr..',
+    'rRwwRr..',
+    'rRwwRr..',
+    'rRRRRr..',
+    '.rrrr...'],
+  'Fleetfoot': [
+    '..w.....',
+    '.www....',
+    'wwhh....',
+    '.whhh...',
+    '..hhhh..',
+    '..hhhhh.',
+    '..hhhhhh',
+    '...sssss'],
+  'Powder Bomb': null,  // filled from ICON_PX below
+  'Acid Spit': null,
+  'Flamethrower': null,
+  'Arc Bolt': null,
+  'Overcharge': [
+    '...ww...',
+    '...bb...',
+    '..bBBb..',
+    '.bBWBBb.',
+    '.bBBBBb.',
+    '.bBWWBb.',
+    '..bBBb..',
+    '...bb...'],
+  'Wand: Twin Cast': [
+    '......y.',
+    '.....yw.',
+    'y...yw..',
+    '.y.yw...',
+    '..yw.o..',
+    '.yw.o...',
+    'yw.o....',
+    'w.o.....'],
+  'Wand: Rapid Fire': [
+    '........',
+    'w..w..w.',
+    '.w..w..w',
+    '..w..w..',
+    '..w..w..',
+    '.w..w..w',
+    'w..w..w.',
+    '........'],
+  'Wand: Amplifier': [
+    '...yy...',
+    '.y.yy.y.',
+    '..yooy..',
+    'yyowwoyy',
+    'yyowwoyy',
+    '..yooy..',
+    '.y.yy.y.',
+    '...yy...'],
+  'Wand: Bouncing Shots': [
+    'w.......',
+    '.w......',
+    '..w...w.',
+    '...w.w.w',
+    '....w...',
+    '........',
+    'ssssssss',
+    'dddddddd'],
+  'Tunneler': [
+    '..ss....',
+    '.s..s...',
+    's....s..',
+    '.....hs.',
+    '....hh.s',
+    '...hh...',
+    '..hh....',
+    '.hh.....'],
+  'Storm Caller': [
+    '.sss....',
+    'ssssss..',
+    'sssssss.',
+    '.ssssss.',
+    '....yy..',
+    '...yy...',
+    '..yyy...',
+    '..y.....'],
+  'Insulated': [
+    '.mmmmmm.',
+    'mM....Mm',
+    'm..ww..m',
+    'm.ww...m',
+    'm..ww..m',
+    'm.ww...m',
+    '.m....m.',
+    '..mmmm..'],
+  'Executioner': [
+    'yyyyyy..',
+    '.ywwy...',
+    '.ywwy...',
+    '..yy....',
+    '..yy....',
+    '.y..y...',
+    '.ywwy...',
+    'yyyyyy..'],
+  'Iron Boots': [
+    '..mm....',
+    '..mMm...',
+    '..mMm...',
+    '..mMmm..',
+    '.mMMmmm.',
+    '.mMMMMm.',
+    'mmmmmmmm',
+    'dddddddd'],
+  'Winter Pelt': [
+    'i..I..i.',
+    '.ffff...',
+    'fffffff.',
+    'ffwffwf.',
+    'fffffff.',
+    '.fffff..',
+    'I.fff..I',
+    '...f.i..'],
+  'Furnace Heart': [
+    '.rr..rr.',
+    'rRRrrRRr',
+    'rRyyyyRr',
+    'rRywwyRr',
+    '.rRyyRr.',
+    '..rRRr..',
+    '...rr...',
+    '........'],
+  'Ember Heart': [
+    '.oo..oo.',
+    'oRRooRRo',
+    'oRRRRRRo',
+    'oRywwyRo',
+    '.oRyyRo.',
+    '..oRRo..',
+    '...oo...',
+    '........'],
+};
+MOD_ICONS['Powder Bomb'] = ICON_PX.bomb;
+MOD_ICONS['Acid Spit'] = ICON_PX.acid;
+MOD_ICONS['Flamethrower'] = ICON_PX.flame;
+MOD_ICONS['Arc Bolt'] = ICON_PX.arc;
+
+function drawPixelIcon(cv, px) {
   const ctx2 = cv.getContext('2d');
   ctx2.clearRect(0, 0, cv.width, cv.height);
-  const px = ICON_PX[key];
   if (!px) return;
   const s = cv.width / 8;
   for (let y = 0; y < 8; y++) {
@@ -335,6 +552,9 @@ function drawSpellIcon(cv, key) {
     }
   }
 }
+
+function drawSpellIcon(cv, key) { drawPixelIcon(cv, ICON_PX[key]); }
+function drawModIcon(cv, name) { drawPixelIcon(cv, MOD_ICONS[name]); }
 
 // rebuild the hotbar slots (on loadout/selection change)
 function updateSpellHUD() {

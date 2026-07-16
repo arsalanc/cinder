@@ -13,13 +13,18 @@ const run = {
   seed: '',
   mods: [],       // names of taken modifiers
   choosing: false, // synergy pick overlay is up (sim pauses)
+  relicChoice: false, // the current pick came from a relic (stay on level)
   dead: false,
   won: false,
+  endless: false, // past WIN_DEPTH: the win is banked, the descent continues
   kills: 0,
   portalHint: false, // player is at the portal but shards remain
 };
 
 const portal = { x: 0, y: 0 };
+// optional per-depth side objective: a buried, hazard-flooded glass vault;
+// touching the relic inside grants an extra synergy pick
+const relic = { x: 0, y: 0, present: false, taken: false };
 
 // --- meta-progression: persists across sessions via localStorage ------------
 
@@ -70,9 +75,13 @@ function startRun() {
   run.depth = 1;
   run.mods = [];
   run.choosing = false;
+  run.relicChoice = false;
   run.dead = false;
   run.won = false;
+  run.endless = false;
   run.kills = 0;
+  relic.present = false;
+  relic.taken = false;
   // Math.random on purpose: fresh entropy for each run; everything after
   // this seed is deterministic via the sim PRNG (which is why a seed plus
   // recorded inputs replays the entire run)
@@ -84,7 +93,16 @@ function startRun() {
 }
 
 function isBossDepth(d) {
-  return d === 3 || d === WIN_DEPTH;
+  // 3 and 6 on the way down; every 3rd depth of the endless descent (9, 12…)
+  return d === 3 || d === WIN_DEPTH ||
+         (d > WIN_DEPTH && (d - WIN_DEPTH) % 3 === 0);
+}
+
+function bossKeyFor(d) {
+  if (d === 3) return 'magmaworm';
+  if (d === WIN_DEPTH) return 'tempest';
+  // endless guardians alternate: 9 worm, 12 tempest, 15 worm, ...
+  return (((d - WIN_DEPTH) / 3) & 1) === 1 ? 'magmaworm' : 'tempest';
 }
 
 function bossAlive() {
@@ -92,15 +110,17 @@ function bossAlive() {
 }
 
 function spawnBoss() {
-  const key = run.depth >= WIN_DEPTH ? 'tempest' : 'magmaworm';
+  const key = bossKeyFor(run.depth);
   const t = CREATURE_TYPES[key];
+  // endless guardians return tougher each loop
+  const hp = Math.round(t.hp * (1 + Math.max(0, run.depth - WIN_DEPTH) * 0.06));
   // arena pocket beside the portal it guards
   const bx = Math.max(14, Math.min(SIM_W - 14, portal.x + (rand() < 0.5 ? -16 : 16)));
   const by = Math.max(14, portal.y - 6);
   digCircle(bx, by, 9);
   creatures.push({
     key, x: bx - t.w / 2, y: by - t.h / 2, vx: 0, vy: 0,
-    w: t.w, h: t.h, hp: t.hp, dir: 1, burning: 0, hurtFlash: 0,
+    w: t.w, h: t.h, hp, maxHp: hp, dir: 1, burning: 0, hurtFlash: 0,
     bob: 0, attackCd: 90,
   });
 }
@@ -109,13 +129,13 @@ function beginLevel() {
   if (isBossDepth(run.depth)) {
     // a purpose-built arena: player on the left shelf, portal + boss on the
     // right, water reservoir between — the worm has to cross to reach you
-    generateBossChamber(run.seed + '#' + run.depth,
-      run.depth >= WIN_DEPTH ? 'tempest' : 'magmaworm');
+    generateBossChamber(run.seed + '#' + run.depth, bossKeyFor(run.depth));
     placeSpawn(bossArena.spawnX - player.w / 2, bossArena.floorY - player.h - 1);
     portal.x = bossArena.portalX;
     portal.y = bossArena.floorY - 1;
     paintCircle(portal.x, portal.y - 1, 4, E.EMPTY);
     shards.length = 0;   // slay the guardian instead of gathering shards
+    relic.present = false; // no side quests in a duel
     clearCreatures();    // a focused duel — no trash mobs cluttering the arena
     spawnBoss();
   } else {
@@ -126,6 +146,7 @@ function beginLevel() {
       Math.round(player.y + player.h / 2));
     placePortal(reach);
     placeShards(reach);
+    placeRelic();
     spawnCreatures(run.depth);
   }
   resetWeather();
@@ -242,6 +263,51 @@ function placeShards(reach) {
   // pathological layout: whatever we placed is the requirement (never 0-lock)
 }
 
+// One optional RELIC per depth: a glass vault buried in solid ground and
+// flooded with the local biome's hazard. Deliberately OFF the critical path
+// (no reachability requirement — Dig Blast is the key); cracking it open and
+// surviving the flood earns an extra synergy pick.
+function placeRelic() {
+  relic.present = false;
+  relic.taken = false;
+  const HAZARD = {
+    'Ice Caves': E.ICE, 'Volcanic Depths': E.LAVA,
+    'Oil Caverns': E.OIL, 'Rusted Works': E.ACID,
+  };
+  for (let attempt = 0; attempt < 600; attempt++) {
+    const cx = 14 + ((rand() * (SIM_W - 28)) | 0);
+    const cy = ((SIM_H * 0.45) + rand() * (SIM_H * 0.42)) | 0;
+    // must be buried: the vault footprint should be nearly all solid rock
+    let solid = 0, walled = false;
+    for (let dy = -3; dy <= 3 && !walled; dy++) {
+      for (let dx = -4; dx <= 4; dx++) {
+        const id = grid[idx(cx + dx, cy + dy)];
+        if (id === E.WALL) { walled = true; break; }
+        if (id !== E.EMPTY && TYPE[id] !== T.LIQUID && TYPE[id] !== T.GAS) solid++;
+      }
+    }
+    if (walled || solid < 56) continue;
+    const ddx = cx - player.x, ddy = cy - player.y;
+    if (ddx * ddx + ddy * ddy < 70 * 70) continue;
+    const dp = (cx - portal.x) * (cx - portal.x) + (cy - portal.y) * (cy - portal.y);
+    if (dp < 25 * 25) continue;
+    // stamp: glass shell (you can SEE the prize), hazard-flooded interior
+    const fill = HAZARD[BIOMES[worldBiomeMap[idx(cx, cy)]].name] || E.WATER;
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -4; dx <= 4; dx++) {
+        const edge = Math.abs(dx) === 4 || Math.abs(dy) === 3;
+        setCell(idx(cx + dx, cy + dy), edge ? E.GLASS : fill);
+      }
+    }
+    setCell(idx(cx, cy), E.EMPTY); // the relic's own cell stays clear
+    relic.x = cx;
+    relic.y = cy;
+    relic.present = true;
+    return;
+  }
+  // cramped map: this depth simply has no vault (it's optional)
+}
+
 function updateGame() {
   if (!run.active) return;
   if (player.alive) {
@@ -254,6 +320,17 @@ function updateGame() {
       if (dx * dx + dy * dy < 16) {
         s.taken = true;
         playSfx('shard');
+        updateRunHUD();
+      }
+    }
+    if (relic.present && !relic.taken) {
+      const rdx = pcx - relic.x, rdy = pcy - relic.y;
+      if (rdx * rdx + rdy * rdy < 12) {
+        relic.taken = true;
+        playSfx('shard');
+        run.choosing = true;
+        run.relicChoice = true; // bonus pick: stay on this level
+        showChoiceOverlay(rollChoices(3, run.mods));
         updateRunHUD();
       }
     }
@@ -272,20 +349,39 @@ function updateGame() {
   }
 }
 
+// the win is banked the moment the depth-6 portal opens; the run keeps going
+function recordWin() {
+  if (typeof replayPlay !== 'undefined' && replayPlay.active) return [];
+  const before = new Set(MODIFIERS.filter(isUnlocked).map(m => m.name));
+  meta.wins++;
+  meta.bestDepth = Math.max(meta.bestDepth, run.depth);
+  saveMeta();
+  return MODIFIERS.filter(isUnlocked).map(m => m.name).filter(n => !before.has(n));
+}
+
 function levelComplete() {
-  if (run.depth >= WIN_DEPTH) { // that was the last portal: victory
-    run.won = true;
-    run.active = false;
-    const unlocked = finishRun(true);
-    if (typeof replayEndRecording === 'function') replayEndRecording();
-    playSfx('portal');
-    showEndOverlay('You escaped the depths — victory!', unlocked);
-    return;
+  playSfx('portal');
+  if (run.depth >= WIN_DEPTH && !run.endless) {
+    // victory — but the depths keep going. Bank the win; descending through
+    // the next pick is opting into the ENDLESS run (End Run exits any time).
+    run.endless = true;
+    recordWin();
   }
   run.depth++;
   run.choosing = true;
-  playSfx('portal');
   showChoiceOverlay(rollChoices(3, run.mods));
+}
+
+// endless overlay's exit ramp: leave with the victory
+function endEndlessRun() {
+  run.active = false;
+  run.won = true;
+  run.choosing = false;
+  const unlocked = finishRun(false); // the win itself was banked at depth 6
+  if (typeof replayEndRecording === 'function') replayEndRecording();
+  hideOverlay();
+  showEndOverlay('You escaped the depths — victory at depth ' + (run.depth - 1) + '!',
+    unlocked);
 }
 
 function chooseModifier(mod) {
@@ -295,7 +391,8 @@ function chooseModifier(mod) {
   run.mods.push(mod.name);
   run.choosing = false;
   hideOverlay();
-  beginLevel();
+  if (run.relicChoice) run.relicChoice = false; // mid-level bonus: stay put
+  else beginLevel();
   updateSpellHUD(); // a synergy may have granted a spell
 }
 
@@ -310,17 +407,86 @@ function showChoiceOverlay(choices) {
   if (typeof document === 'undefined') return;
   const overlay = document.getElementById('overlay');
   document.getElementById('overlay-title').textContent =
-    'Depth ' + run.depth + ' of ' + WIN_DEPTH + ' — choose a synergy';
+    run.relicChoice ? 'Relic recovered — choose a bonus synergy'
+    : run.endless ? (run.depth === WIN_DEPTH + 1
+        ? 'VICTORY — the depths continue. Descend?'
+        : 'Depth ' + run.depth + ' — the endless descent')
+    : 'Depth ' + run.depth + ' of ' + WIN_DEPTH + ' — choose a synergy';
   document.getElementById('overlay-stats').innerHTML = '';
   const cards = document.getElementById('overlay-cards');
   cards.innerHTML = '';
+  cards.className = '';
   for (const mod of choices) {
     const btn = document.createElement('button');
     btn.className = 'card';
-    btn.innerHTML = '<b>' + mod.name + '</b><span>' + mod.desc + '</span>';
+    const cv = document.createElement('canvas');
+    cv.width = 32; cv.height = 32;
+    cv.className = 'mod-icon';
+    drawModIcon(cv, mod.name);
+    btn.appendChild(cv);
+    const b = document.createElement('b');
+    b.textContent = mod.name;
+    const span = document.createElement('span');
+    span.textContent = mod.desc;
+    btn.appendChild(b);
+    btn.appendChild(span);
     btn.addEventListener('click', () => chooseModifier(mod));
     cards.appendChild(btn);
   }
+  // endless descent: an exit ramp next to the picks (picking = descending)
+  if (run.endless && !run.relicChoice) {
+    const btn = document.createElement('button');
+    btn.className = 'card';
+    btn.innerHTML = '<b>End Run</b><span>Escape with the victory. Depth ' +
+      (run.depth - 1) + ' stands.</span>';
+    btn.addEventListener('click', endEndlessRun);
+    cards.appendChild(btn);
+  }
+  document.getElementById('overlay-action').style.display = 'none';
+  overlay.style.display = 'flex';
+}
+
+// The collection: every synergy as a sprite tile — earned ones in color,
+// locked ones blacked out with their unlock condition
+function showCollectionOverlay() {
+  if (typeof document === 'undefined') return;
+  const overlay = document.getElementById('overlay');
+  const owned = MODIFIERS.filter(isUnlocked).length;
+  document.getElementById('overlay-title').textContent =
+    'Collection — ' + owned + ' / ' + MODIFIERS.length + ' synergies';
+  document.getElementById('overlay-stats').innerHTML =
+    'Best D' + meta.bestDepth + ' &middot; Wins ' + meta.wins +
+    ' &middot; Kills ' + meta.kills + ' &middot; Runs ' + meta.runs;
+  const cards = document.getElementById('overlay-cards');
+  cards.innerHTML = '';
+  cards.className = 'collection';
+  for (const mod of MODIFIERS) {
+    const unlocked = isUnlocked(mod);
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (unlocked ? '' : ' locked');
+    const cv = document.createElement('canvas');
+    cv.width = 32; cv.height = 32;
+    drawModIcon(cv, mod.name);
+    tile.appendChild(cv);
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.textContent = unlocked ? mod.name : '???';
+    tile.appendChild(nm);
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = unlocked ? '' : mod.unlock.hint;
+    tile.appendChild(sub);
+    if (unlocked) tile.title = mod.desc;
+    cards.appendChild(tile);
+  }
+  const close = document.createElement('button');
+  close.className = 'card close';
+  close.textContent = 'Close';
+  close.addEventListener('click', () => {
+    hideOverlay();
+    cards.className = '';
+  });
+  cards.appendChild(close);
   document.getElementById('overlay-action').style.display = 'none';
   overlay.style.display = 'flex';
 }
@@ -328,6 +494,7 @@ function showChoiceOverlay(choices) {
 function showEndOverlay(title, unlocked) {
   if (typeof document === 'undefined') return;
   const overlay = document.getElementById('overlay');
+  document.getElementById('overlay-cards').className = '';
   document.getElementById('overlay-title').textContent = title;
   let html = 'Kills ' + run.kills +
     ' &middot; Best depth ' + meta.bestDepth +
@@ -345,9 +512,10 @@ function showEndOverlay(title, unlocked) {
 function updateRunHUD() {
   if (typeof document === 'undefined') return;
   document.getElementById('hud-depth').textContent = run.active
-    ? 'D' + run.depth + '/' + WIN_DEPTH +
+    ? 'D' + run.depth + (run.endless ? '/∞' : '/' + WIN_DEPTH) +
       (isBossDepth(run.depth) ? ' ☠'
-        : shards.length ? ' ◆' + (shards.length - shardsRemaining()) + '/' + shards.length : '')
+        : shards.length ? ' ◆' + (shards.length - shardsRemaining()) + '/' + shards.length : '') +
+      (relic.present && !relic.taken ? ' ✦' : '')
     : '';
   document.getElementById('mods').textContent =
     run.mods.length ? run.mods.join(' · ') : '';
@@ -366,7 +534,7 @@ function drawBossBar() {
   displayCtx.fillRect(x - 2, 8, w + 4, 12);
   // bar flashes gold while the boss is in a vulnerable window (hit it now)
   displayCtx.fillStyle = b.exposedT > 0 ? '#ffe08a' : '#d84a3a';
-  displayCtx.fillRect(x, 10, w * Math.max(0, b.hp / t.hp), 8);
+  displayCtx.fillRect(x, 10, w * Math.max(0, b.hp / (b.maxHp || t.hp)), 8);
   // phase thresholds so the rhythm is readable
   displayCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
   displayCtx.fillRect(x + w * 0.34, 9, 1.5, 10);
@@ -405,6 +573,18 @@ function drawPortal() {
     displayCtx.fillStyle = '#7ee8e0';
     displayCtx.fillRect(sx - 0.5 * cw, sy - 1.5 * ch, cw, 3 * ch);
     displayCtx.fillRect(sx - 1.5 * cw, sy - 0.5 * ch, 3 * cw, ch);
+  }
+
+  // the relic: a pulsing gold prize glinting through its vault glass
+  if (relic.present && !relic.taken) {
+    const rx = (relic.x - camera.x) * cw;
+    const ry = (relic.y - camera.y) * ch;
+    const pulse = 0.6 + Math.sin(simFrame * 0.12 + relic.x) * 0.4;
+    displayCtx.fillStyle = 'rgba(255, 215, 94, ' + (0.35 * pulse).toFixed(2) + ')';
+    displayCtx.fillRect(rx - 2 * cw, ry - 2 * ch, 4 * cw, 4 * ch);
+    displayCtx.fillStyle = '#ffd75e';
+    displayCtx.fillRect(rx - 0.5 * cw, ry - 1.5 * ch, cw, 3 * ch);
+    displayCtx.fillRect(rx - 1.5 * cw, ry - 0.5 * ch, 3 * cw, ch);
   }
 
   const sx = (portal.x - camera.x) * cw;

@@ -114,7 +114,8 @@ function creatureCollides(c, px, py) {
 
 function spawnCreatures(depth) {
   clearCreatures();
-  const want = Math.min(14, 3 + depth * 2);
+  // endless depths pack denser hordes
+  const want = Math.min(depth > 6 ? 20 : 14, 3 + depth * 2);
   for (let attempt = 0; attempt < 800 && creatures.length < want; attempt++) {
     const x = 6 + ((rand() * (SIM_W - 14)) | 0);
     const y = 10 + ((rand() * (SIM_H - 22)) | 0);
@@ -137,6 +138,41 @@ function spawnCreatures(depth) {
       attackCd: 60,
     });
   }
+  // depth 4+: one ELITE — the biome's signature enemy, oversized and heavily
+  // plated, fighting in the boss grammar (periodic vulnerability windows)
+  if (depth >= 4) spawnElite();
+}
+
+function spawnElite() {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const x = 8 + ((rand() * (SIM_W - 20)) | 0);
+    const y = 10 + ((rand() * (SIM_H - 26)) | 0);
+    let open = true;
+    for (let dy = 0; dy < 6 && open; dy++) {
+      for (let dx = 0; dx < 8 && open; dx++) {
+        if (grid[idx(x + dx, y + dy)] !== E.EMPTY) open = false;
+      }
+    }
+    if (!open) continue;
+    const ddx = x - player.x, ddy = y - player.y;
+    if (ddx * ddx + ddy * ddy < 60 * 60) continue;
+    const biomeName = BIOMES[worldBiomeMap[idx(x, y)]].name;
+    const key = (BIOME_SPAWNS[biomeName] || BIOME_SPAWNS['Stone Caverns'])[0][0];
+    const t = CREATURE_TYPES[key];
+    creatures.push({
+      key, x: x + 1, y: y + 1, vx: 0, vy: 0,
+      w: t.w + 2, h: t.h + 1, hp: t.hp * 3, maxHp: t.hp * 3,
+      dir: rand() < 0.5 ? -1 : 1, burning: 0, hurtFlash: 0,
+      bob: rand() * 6.28, attackCd: 60,
+      elite: true, eliteCd: 200, exposedT: 0,
+    });
+    return;
+  }
+}
+
+// vulnerability-window length, stretched by Executioner
+function exposeFor(frames) {
+  return Math.round(frames * ((runState.mult && runState.mult.windowLen) || 1));
 }
 
 function damageCreature(c, dmg, pierce) {
@@ -146,8 +182,10 @@ function damageCreature(c, dmg, pierce) {
   if ((c.surgeT || 0) > 0 || (c.squallT || 0) > 0) { c.hurtFlash = 2; return; }
   // a vulnerable window takes full double damage (bypassing armor) — it's the
   // intended time to strike; otherwise armored types shrug hits off unless
-  // the hit pierces (Iron Boots stomps crush through shell plating)
-  c.hp -= c.exposedT > 0 ? dmg * 2 : dmg * (pierce ? 1 : 1 - (t.armor || 0));
+  // the hit pierces (Iron Boots stomps crush through shell plating).
+  // Elites wear heavy plating whatever their base type.
+  const armor = c.elite ? Math.max(t.armor || 0, 0.6) : (t.armor || 0);
+  c.hp -= c.exposedT > 0 ? dmg * 2 : dmg * (pierce ? 1 : 1 - armor);
   c.hurtFlash = 8;
   playSfx('hit');
 }
@@ -169,7 +207,7 @@ function bossStomp(c) {
 // thermal shock: soaking a furnace-hot boss flash-cools it — the shell (or
 // storm) cracks and it sits EXPOSED, venting the water off as steam
 function quenchBoss(c, frames) {
-  c.exposedT = frames;
+  c.exposedT = exposeFor(frames);
   c.airborne = false;
   c.breachTel = 0;
   const bx = Math.round(c.x + c.w / 2), by = Math.round(c.y + c.h / 2);
@@ -208,6 +246,12 @@ function killCreature(i) {
     splash(cx, cy, 1, E.SMOKE);
   }
   wand.mana = Math.min(wand.maxMana, wand.mana + 10); // kill reward
+  if (c.elite) {
+    // felling an elite: a real heal and a deep mana swig
+    player.hp = Math.min(player.maxHp, player.hp + 15);
+    wand.mana = Math.min(wand.maxMana, wand.mana + 30);
+    splash(cx, cy, 2, E.SMOKE);
+  }
   if (t.boss) {
     // slaying a guardian: big heal, full mana, and a death throe
     player.hp = Math.min(player.maxHp, player.hp + 30);
@@ -228,6 +272,21 @@ function updateCreatures() {
     const c = creatures[i];
     const t = CREATURE_TYPES[c.key];
     if (c.hurtFlash > 0) c.hurtFlash--;
+
+    // elite rhythm: heavily plated most of the time, periodically EXPOSED
+    // (pulsing gold, 2× damage) — the boss grammar, miniaturized. Unlike a
+    // boss it keeps fighting through its window; the window is your opening,
+    // not a truce.
+    if (c.elite) {
+      if (c.exposedT > 0) {
+        if (--c.exposedT === 0) c.eliteCd = 200;
+      } else if (--c.eliteCd <= 0) {
+        c.exposedT = exposeFor(80);
+        const ex = Math.round(c.x + c.w / 2), ey = Math.round(c.y) - 1;
+        if (ey > 0 && grid[idx(ex, ey)] === E.EMPTY) setCell(idx(ex, ey), E.SMOKE);
+        playSfx('hurt');
+      }
+    }
 
     // --- environment: creatures obey the same elements the player does
     let dmg = 0;
@@ -323,7 +382,7 @@ function updateCreatures() {
       // instead. Each phase break it dives deep (invulnerable) and erupts
       // magma geysers while boiling away part of the reservoir — quench
       // water gets scarcer as the fight escalates.
-      const ratio = c.hp / t.hp;
+      const ratio = c.hp / (c.maxHp || t.hp);
       const phase = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
       if (c.surfaceCd === undefined) {
         c.surfaceCd = 220; c.exposedT = 0; c.breachTel = 0; c.airborne = false;
@@ -503,7 +562,7 @@ function updateCreatures() {
       // it into the window early — but the splash arcs back, live. Phase
       // breaks it rides to the ceiling (invulnerable) and rains a squall:
       // more floor water for its aura to electrify, and more quench ammo.
-      const ratio = c.hp / t.hp;
+      const ratio = c.hp / (c.maxHp || t.hp);
       const phase = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
       if (c.chargeCd === undefined) {
         c.chargeCd = 320; c.chargingT = 0; c.exposedT = 0;
@@ -552,7 +611,7 @@ function updateCreatures() {
       if (c.wet >= 4) {
         electrify(bx, by, 6);
         c.chargingT = 0;
-        c.exposedT = 150 - phase * 15;
+        c.exposedT = exposeFor(150 - phase * 15);
         playSfx('arc');
         continue;
       }
@@ -579,7 +638,7 @@ function updateCreatures() {
           }
           electrify(bx, by, 8);
           playSfx('arc');
-          c.exposedT = 160 - phase * 20;
+          c.exposedT = exposeFor(160 - phase * 20);
         }
         continue;
       }
@@ -729,11 +788,12 @@ function updateCreatures() {
         player.hurtCd = Math.max(player.hurtCd, 20);
         if (c.hp <= 0) { killCreature(i); continue; }
       } else {
-        player.hp -= t.contactDmg;
+        const cd = c.elite ? Math.round(t.contactDmg * 1.5) : t.contactDmg;
+        player.hp -= cd;
         player.hurtCd = 45;
         if (t.chill) player.warmth = Math.max(-5, player.warmth - t.chill); // frostling bite
         playSfx('hurt');
-        for (const hook of runState.onDamage) hook(t.contactDmg);
+        for (const hook of runState.onDamage) hook(cd);
         if (player.hp <= 0) { player.hp = 0; player.alive = false; }
       }
     }

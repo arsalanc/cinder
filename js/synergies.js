@@ -15,6 +15,8 @@ const runState = {
   trampleHeal: 0,    // hp per plant broken by walking through it
   stomp: false,      // Iron Boots: landing on any enemy crushes it
   emitHeat: 0,       // Ember Heart: degrees/frame radiated into the temp field
+  weatherLock: null, // Storm Caller: weather mode forced for the whole run
+  lightningWard: false, // Storm Caller: sky bolts never strike near you
 };
 
 // pristine copies of everything modifiers may touch
@@ -38,13 +40,16 @@ function resetModifiers() {
   for (const k in base) REACTIONS[k] = base[k];
   explosionScale = 1;
   runState.mult = { fireDmg: 1, lavaDmg: 1, acidDmg: 1, burnTime: 1, speed: 1,
-                    jump: 1, manaRegen: 1, coldDmg: 1, heatDmg: 1 };
+                    jump: 1, manaRegen: 1, coldDmg: 1, heatDmg: 1,
+                    elecDmg: 1, windowLen: 1 };
   runState.auras = [];
   runState.heals = {};
   runState.onDamage = [];
   runState.trampleHeal = 0;
   runState.stomp = false;
   runState.emitHeat = 0;
+  runState.weatherLock = null;
+  runState.lightningWard = false;
 }
 
 const MODIFIERS = [
@@ -203,6 +208,30 @@ const MODIFIERS = [
     unlock: { stat: 'kills', at: 25, hint: 'Kill 25 creatures' },
     apply() {
       wandMods.bounces += 1;
+    },
+  },
+  {
+    name: 'Storm Caller', tags: ['storm'],
+    desc: 'The storm never ends — and its lightning never strikes near you.',
+    unlock: { stat: 'bestDepth', at: 5, hint: 'Reach depth 5' },
+    apply() {
+      runState.weatherLock = 'storm';
+      runState.lightningWard = true;
+    },
+  },
+  {
+    name: 'Insulated', tags: ['storm', 'survival'],
+    desc: 'Electricity barely tickles you. Live water is your wading pool.',
+    apply() {
+      runState.mult.elecDmg *= 0.15;
+    },
+  },
+  {
+    name: 'Executioner', tags: ['wand'],
+    desc: 'Vulnerability windows last half again as long. Make them count.',
+    unlock: { stat: 'kills', at: 30, hint: 'Kill 30 creatures' },
+    apply() {
+      runState.mult.windowLen *= 1.5;
     },
   },
   {

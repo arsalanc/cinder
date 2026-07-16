@@ -55,7 +55,12 @@ function resetWeather() {
 
 function updateWeather() {
   if (weather.override === 'off') return;
-  if (weather.override === 'auto' && --weather.timer <= 0) rollWeather();
+  // Storm Caller: the run's weather is pinned — no rolling out of it
+  // (typeof guard: weather.js also loads in harnesses without synergies.js)
+  const lock = typeof runState !== 'undefined' && runState.weatherLock;
+  if (lock && weather.override === 'auto') {
+    if (weather.mode !== lock) setWeather(lock, 999999);
+  } else if (weather.override === 'auto' && --weather.timer <= 0) rollWeather();
   if (weather.mode === 'clear') return;
 
   // precipitation falls from the sky row
@@ -78,8 +83,16 @@ function updateWeather() {
 }
 
 function lightningStrike() { // storms: a random bolt out of the sky row
-  const x = 4 + ((rand() * (SIM_W - 8)) | 0);
-  lightningStrikeAt(x, 1, true);
+  for (let tries = 0; tries < 8; tries++) {
+    const x = 4 + ((rand() * (SIM_W - 8)) | 0);
+    // Storm Caller's ward: the storm is loyal — bolts land away from you
+    // (18 covers the bolt column plus its radius-3 ground splash)
+    if (typeof runState !== 'undefined' && runState.lightningWard &&
+        typeof player !== 'undefined' && player.alive &&
+        Math.abs(x - (player.x + player.w / 2)) < 18) continue;
+    lightningStrikeAt(x, 1, true);
+    return;
+  }
 }
 
 // The bolt itself: descend from (x, yTop) to the first surface, leave a
