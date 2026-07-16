@@ -185,7 +185,9 @@ function updatePlayer() {
   }
   const ambient = tempAt(pcx, pcy);
   let target = warmthTarget(ambient);
-  if (player.burning > 0) target = 110;                 // on fire = plenty warm
+  // Wormheart: the fire is friendly — burning warms toward cozy (never into
+  // heatstroke) instead of blazing to 110
+  if (player.burning > 0) target = runState.fireWarms ? Math.max(80, target) : 110;
   else if (touchedWater && ambient < 20) target -= 15;  // wind-chill in cold water
   else if (touchedWater && target > 55) target = 55;    // a hot pool keeps you cool
   target = Math.max(-5, Math.min(120, target));
@@ -195,7 +197,7 @@ function updatePlayer() {
   else if (player.warmth > 90) dmg += (player.warmth - 90) * 0.010 * m.heatDmg; // heatstroke
   if (player.burning > 0) {
     player.burning--;
-    dmg += 0.08 * m.fireDmg;
+    if (!runState.fireWarms) dmg += 0.08 * m.fireDmg;
     // shed a lick of flame above the head now and then
     const hx = Math.round(player.x + player.w / 2), hy = y0 - 1;
     if (rand() < 0.12 && hy > 0 && grid[idx(hx, hy)] === E.EMPTY) {

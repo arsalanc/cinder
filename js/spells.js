@@ -44,7 +44,13 @@ const SPELLS = {
   arc: {
     name: 'Arc Bolt', color: '#f0f4ff', sfx: 'arc', damage: 8,
     cost: 14, cooldown: 18, speed: 3.0, gravity: 0, life: 70,
-    impact(x, y, b = 0) { electrify(x, y, 2 + b); },
+    impact(x, y, b = 0) {
+      // Stormcore trophy: the impact calls down the tempest's own bolt
+      if (runState.arcLightning && typeof lightningStrikeAt === 'function') {
+        lightningStrikeAt(x, Math.max(2, y - 18), false);
+      }
+      electrify(x, y, 2 + b);
+    },
   },
 };
 
@@ -537,6 +543,56 @@ MOD_ICONS['Powder Bomb'] = ICON_PX.bomb;
 MOD_ICONS['Acid Spit'] = ICON_PX.acid;
 MOD_ICONS['Flamethrower'] = ICON_PX.flame;
 MOD_ICONS['Arc Bolt'] = ICON_PX.arc;
+// boss trophies
+MOD_ICONS['Wormheart'] = [
+  '.rr..rr.',
+  'rRRrrRRr',
+  'rRoyyoRr',
+  'rRyooyRr',
+  '.rRyyRr.',
+  '..rRRr..',
+  '...rr...',
+  '........'];
+MOD_ICONS['Stormcore'] = [
+  '.bb..bb.',
+  'bBBbbBBb',
+  'bBBywBBb',
+  'bBByyBBb',
+  '.bBywBb.',
+  '..bByb..',
+  '...bb...',
+  '........'];
+
+// collection trophy tiles (not modifiers — the guardians themselves)
+const TROPHY_ICONS = {
+  magmaworm: [
+    '..rrr...',
+    '.rRRRr..',
+    'rRwRRRr.',
+    'rRRRoRr.',
+    '.rrRRRr.',
+    '...rRRr.',
+    '.rRRRr..',
+    'rrrrr...'],
+  tempest: [
+    '..BBBB..',
+    '.BWBBWB.',
+    'BBBBBBBB',
+    '.BBBBBB.',
+    '..yy.B..',
+    '..yyy...',
+    '.yy.....',
+    '.y......'],
+  elite: [
+    'y..yy..y',
+    'yy.yy.yy',
+    'yyyyyyyy',
+    '.ywwwwy.',
+    '.ywyywy.',
+    '.yyyyyy.',
+    '........',
+    '........'],
+};
 
 function drawPixelIcon(cv, px) {
   const ctx2 = cv.getContext('2d');

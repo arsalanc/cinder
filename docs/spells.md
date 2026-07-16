@@ -45,7 +45,9 @@ milestone (best depth, wins, or kills) is reached.
 | Wand: Bouncing Shots | Projectiles ricochet off terrain one more time before bursting. | 25 kills |
 | Storm Caller | The storm never ends — and its lightning never strikes near you. | reach depth 5 |
 | Insulated | Electricity barely tickles you. Live water is your wading pool. | starter |
-| Executioner | Vulnerability windows last half again as long. Make them count. | 30 kills |
+| Executioner | Vulnerability windows last half again as long. Make them count. | fell 5 elites |
+| Wormheart | The worm's furnace beats in your chest: burning no longer harms you — it keeps you warm. | slay the Magma Worm |
+| Stormcore | You took its weapon: Arc Bolt impacts call down a real lightning strike. | slay the Tempest |
 | Iron Boots | Landing on any enemy crushes it, armor and all — then you bounce clear. | starter |
 | Winter Pelt | Hypothermia cannot touch you. Heat, though, bites much harder. | starter |
 | Furnace Heart | Heatstroke cannot touch you. The cold, though, bites much harder. | starter |

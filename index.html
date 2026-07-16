@@ -314,6 +314,16 @@
   .tile.locked { background: #101016; }
   .tile.locked canvas { filter: brightness(0.16) saturate(0); }
   .tile.locked .nm { color: var(--dim); }
+  .tile.trophy:not(.locked) { border-color: #8a6d2a; }
+  .tile.trophy:not(.locked) .sub { color: #ffd75e; }
+  .grid-label {
+    grid-column: 1 / -1;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--dim);
+    text-align: left;
+    padding: 4px 2px 0;
+  }
   #overlay-cards.collection .card.close {
     grid-column: 1 / -1;
     width: auto;

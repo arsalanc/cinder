@@ -29,7 +29,8 @@ const relic = { x: 0, y: 0, present: false, taken: false };
 // --- meta-progression: persists across sessions via localStorage ------------
 
 function loadMeta() {
-  const m = { bestDepth: 0, wins: 0, kills: 0, runs: 0 };
+  const m = { bestDepth: 0, wins: 0, kills: 0, runs: 0,
+              wormKills: 0, tempestKills: 0, eliteKills: 0 };
   try {
     if (typeof localStorage !== 'undefined') {
       Object.assign(m, JSON.parse(localStorage.getItem('cinder-meta') || '{}'));
@@ -460,6 +461,38 @@ function showCollectionOverlay() {
   const cards = document.getElementById('overlay-cards');
   cards.innerHTML = '';
   cards.className = 'collection';
+  // --- trophies: the guardians and the elite hunt ---------------------------
+  const TROPHIES = [
+    { name: 'Magma Worm', icon: 'magmaworm', stat: 'wormKills', hint: 'Slay the Magma Worm' },
+    { name: 'Tempest', icon: 'tempest', stat: 'tempestKills', hint: 'Slay the Tempest' },
+    { name: 'Elite Hunter', icon: 'elite', stat: 'eliteKills', hint: 'Fell an elite' },
+  ];
+  const label = txt => {
+    const el = document.createElement('div');
+    el.className = 'grid-label';
+    el.textContent = txt;
+    cards.appendChild(el);
+  };
+  label('TROPHIES');
+  for (const tr of TROPHIES) {
+    const n = meta[tr.stat] || 0;
+    const tile = document.createElement('div');
+    tile.className = 'tile trophy' + (n > 0 ? '' : ' locked');
+    const cv = document.createElement('canvas');
+    cv.width = 32; cv.height = 32;
+    drawPixelIcon(cv, TROPHY_ICONS[tr.icon]);
+    tile.appendChild(cv);
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.textContent = n > 0 ? tr.name : '???';
+    tile.appendChild(nm);
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = n > 0 ? '×' + n : tr.hint;
+    tile.appendChild(sub);
+    cards.appendChild(tile);
+  }
+  label('SYNERGIES');
   for (const mod of MODIFIERS) {
     const unlocked = isUnlocked(mod);
     const tile = document.createElement('div');

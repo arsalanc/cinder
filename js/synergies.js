@@ -17,6 +17,8 @@ const runState = {
   emitHeat: 0,       // Ember Heart: degrees/frame radiated into the temp field
   weatherLock: null, // Storm Caller: weather mode forced for the whole run
   lightningWard: false, // Storm Caller: sky bolts never strike near you
+  fireWarms: false,  // Wormheart: burning warms you instead of harming you
+  arcLightning: false, // Stormcore: Arc Bolt impacts call down real lightning
 };
 
 // pristine copies of everything modifiers may touch
@@ -50,6 +52,8 @@ function resetModifiers() {
   runState.emitHeat = 0;
   runState.weatherLock = null;
   runState.lightningWard = false;
+  runState.fireWarms = false;
+  runState.arcLightning = false;
 }
 
 const MODIFIERS = [
@@ -229,9 +233,26 @@ const MODIFIERS = [
   {
     name: 'Executioner', tags: ['wand'],
     desc: 'Vulnerability windows last half again as long. Make them count.',
-    unlock: { stat: 'kills', at: 30, hint: 'Kill 30 creatures' },
+    unlock: { stat: 'eliteKills', at: 5, hint: 'Fell 5 elites' },
     apply() {
       runState.mult.windowLen *= 1.5;
+    },
+  },
+  // --- boss trophies: forged from the guardian that dropped them ------------
+  {
+    name: 'Wormheart', tags: ['fire', 'survival'],
+    desc: 'The worm\'s furnace beats in your chest: burning no longer harms you — it keeps you warm.',
+    unlock: { stat: 'wormKills', at: 1, hint: 'Slay the Magma Worm' },
+    apply() {
+      runState.fireWarms = true;
+    },
+  },
+  {
+    name: 'Stormcore', tags: ['storm', 'wand'],
+    desc: 'You took its weapon: Arc Bolt impacts call down a real lightning strike.',
+    unlock: { stat: 'tempestKills', at: 1, hint: 'Slay the Tempest' },
+    apply() {
+      runState.arcLightning = true;
     },
   },
   {

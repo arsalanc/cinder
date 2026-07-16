@@ -262,7 +262,13 @@ function killCreature(i) {
   }
   if (typeof run !== 'undefined' && run.active) {
     run.kills++; // replays re-enact kills but never farm meta progression
-    if (typeof replayPlay === 'undefined' || !replayPlay.active) meta.kills++;
+    if (typeof replayPlay === 'undefined' || !replayPlay.active) {
+      meta.kills++;
+      // trophy ledger: bosses and elites leave a permanent mark
+      if (c.elite) meta.eliteKills++;
+      if (c.key === 'magmaworm') meta.wormKills++;
+      if (c.key === 'tempest') meta.tempestKills++;
+    }
   }
   playSfx('squish');
 }

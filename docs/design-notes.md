@@ -327,6 +327,22 @@ boss windows). Re-grounding the power-up pool and the run loop in them:
   locked ones blacked out showing only their unlock condition. A test
   guards that every modifier has a valid icon and no icons are orphaned.
 
+**Trophies (done):**
+- New meta stats `wormKills` / `tempestKills` / `eliteKills` (counted in
+  `killCreature`, replay-guarded like everything else).
+- **Wormheart** (first worm kill) — burning no longer harms you; it warms
+  you toward cozy (capped at 80 warmth, so the trophy can never heatstroke
+  you). Inversion, not mitigation — distinct from Fireproof Hide, feeds the
+  fire build.
+- **Stormcore** (first tempest kill) — Arc Bolt impacts call down a real
+  `lightningStrikeAt` bolt: you take the boss's weapon.
+- **Executioner re-gated** from 30 generic kills to **5 elite kills** — the
+  elite hunt earns the window-stretcher.
+- Collection gains a **TROPHIES row** above the synergies: guardian sprite
+  tiles (gold-bordered once earned, kill count beneath, blacked out with
+  the hunt condition until then). Both trophy mods are deliberately
+  build-around sidegrades so re-killing bosses never becomes mandatory.
+
 **Batch 3 (candidate ideas):**
 - Daily-run scoreboard for endless depth reached; ghost replays.
 - Elite affixes (a frost elite in the Oil Caverns, etc.) for cross-biome
