@@ -27,7 +27,7 @@ milestone (best depth, wins, or kills) is reached.
 | --- | --- | --- |
 | Pyromaniac | The world is far more flammable and burns longer. Fire only tickles you. | starter |
 | Fireproof Hide | Fire barely hurts, lava is survivable, and you stop burning almost immediately. | starter |
-| Frost Aura | Water near you freezes into solid ice. Walk across lakes; seal off floods. | starter |
+| Frost Aura | The surface of water near you freezes into a walkable crust. The depths stay liquid. | starter |
 | Lava Strider | Lava you approach crusts into stone, and what does touch you burns less. | 1 win |
 | Steam Sprite | Steam heals you and lingers far longer. Boil a lake, breathe it in. | starter |
 | Green Thumb | Plants spread through water aggressively, and trampling them heals you. | starter |
@@ -43,4 +43,8 @@ milestone (best depth, wins, or kills) is reached.
 | Wand: Rapid Fire | Your wand cools down 45% faster. | starter |
 | Wand: Amplifier | Projectiles hit 50% harder and burst with a bigger splash. | starter |
 | Wand: Bouncing Shots | Projectiles ricochet off terrain one more time before bursting. | 25 kills |
+| Iron Boots | Landing on any enemy crushes it, armor and all — then you bounce clear. | starter |
+| Winter Pelt | Hypothermia cannot touch you. Heat, though, bites much harder. | starter |
+| Furnace Heart | Heatstroke cannot touch you. The cold, though, bites much harder. | starter |
+| Ember Heart | You radiate furnace heat: never cold, ice and snow melt around you — but water simmers away near you. | 20 kills |
 | Tunneler | Stone, sand, and ice near you slowly crumble away. You are the shovel. | starter |

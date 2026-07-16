@@ -273,6 +273,42 @@ active slot, dimmed icons when mana is short, click or 1–5 to select.
 6. ~~**Win condition + meta-progression**~~ — done.
 7. ~~**Creatures**~~ — done, with biome spawn tables and a ranged type.
 
+## Roadmap — 2026-07 re-evaluation
+
+The modifier table predated most of the systems now in the game
+(temperature/warmth, electricity, molten, ecosystems, weather, stomping,
+boss windows). Re-grounding the power-up pool and the run loop in them:
+
+**Batch 1 (in progress):**
+- ~~Frost Aura rework~~ — freeze only the *surface* of water into walkable
+  crust; the pool below stays liquid. Fixes the collision with quench-based
+  boss fights (the old aura could freeze your own reservoir).
+- ~~Iron Boots~~ — the boss stomp becomes a run verb: stomp any enemy,
+  piercing armor. Teaches the boss mechanic mid-run.
+- ~~Winter Pelt / Furnace Heart~~ — the missing climate picks: immune to
+  one temperature extreme, more vulnerable to the other.
+- ~~Ember Heart~~ — radiate real heat into the temperature field: never
+  cold, melt ice/snow as you walk — but nearby water simmers away.
+- ~~Tag-weighted rolls~~ — mods carry tags (fire/frost/storm/wand/...);
+  `rollChoices` weights toward tags already taken so builds snowball.
+
+**Batch 2 (planned):**
+- **Elites** — one oversized signature enemy per depth 4+, armored with a
+  telegraphed vulnerability window (the boss grammar, miniaturized); kill
+  reward heal + mana.
+- **Relic vaults** — one optional side objective per depth: a buried vault
+  behind a biome-flavored hazard (flooded / frozen / gas-filled), rewarding
+  an extra mod pick. Makes set-pieces destinations, not scenery.
+- **Endless descent** — after the win, keep descending: scaling depths,
+  both bosses recurring with tighter cadences; gives dailies a score axis.
+- **Storm Caller** — weather locked to storm, lightning never strikes near
+  you. **Insulated** — heavy ELEC/EWATER resistance (builds for Rusted
+  Works + the tempest). **Executioner** — vulnerable windows last longer.
+
+**Known-good accidents to preserve:** Steam Sprite heals off boss-quench
+steam; Demolitionist is deliberately useless against shelled bosses (the
+windows are the fight).
+
 ## Weather (done)
 
 Ambient surface weather cycles between long clear spells and 15-30s events:

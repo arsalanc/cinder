@@ -139,14 +139,15 @@ function spawnCreatures(depth) {
   }
 }
 
-function damageCreature(c, dmg) {
+function damageCreature(c, dmg, pierce) {
   const t = CREATURE_TYPES[c.key];
   // boss set-piece beats (magma surge, storm squall) are invulnerable — the
   // fight is about surviving them, not DPSing through them
   if ((c.surgeT || 0) > 0 || (c.squallT || 0) > 0) { c.hurtFlash = 2; return; }
   // a vulnerable window takes full double damage (bypassing armor) — it's the
-  // intended time to strike; otherwise armored types shrug hits off
-  c.hp -= c.exposedT > 0 ? dmg * 2 : dmg * (1 - (t.armor || 0));
+  // intended time to strike; otherwise armored types shrug hits off unless
+  // the hit pierces (Iron Boots stomps crush through shell plating)
+  c.hp -= c.exposedT > 0 ? dmg * 2 : dmg * (pierce ? 1 : 1 - (t.armor || 0));
   c.hurtFlash = 8;
   playSfx('hit');
 }
@@ -719,12 +720,22 @@ function updateCreatures() {
     if (player.alive && player.hurtCd <= 0 &&
         c.x < player.x + player.w && c.x + c.w > player.x &&
         c.y < player.y + player.h && c.y + c.h > player.y) {
-      player.hp -= t.contactDmg;
-      player.hurtCd = 45;
-      if (t.chill) player.warmth = Math.max(-5, player.warmth - t.chill); // frostling bite
-      playSfx('hurt');
-      for (const hook of runState.onDamage) hook(t.contactDmg);
-      if (player.hp <= 0) { player.hp = 0; player.alive = false; }
+      // Iron Boots: landing on it crushes it (piercing armor) instead of it
+      // hurting you — a bloat still detonates underfoot, so choose your prey
+      if (runState.stomp && player.vy > 0.5 &&
+          player.y + player.h < c.y + c.h * 0.7) {
+        damageCreature(c, 18, true);
+        player.vy = -1.4;
+        player.hurtCd = Math.max(player.hurtCd, 20);
+        if (c.hp <= 0) { killCreature(i); continue; }
+      } else {
+        player.hp -= t.contactDmg;
+        player.hurtCd = 45;
+        if (t.chill) player.warmth = Math.max(-5, player.warmth - t.chill); // frostling bite
+        playSfx('hurt');
+        for (const hook of runState.onDamage) hook(t.contactDmg);
+        if (player.hp <= 0) { player.hp = 0; player.alive = false; }
+      }
     }
   }
 

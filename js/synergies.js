@@ -9,10 +9,12 @@
 // Player-facing knobs modifiers can turn. The player reads these each frame.
 const runState = {
   mult: null,        // damage/movement multipliers (set in resetModifiers)
-  auras: [],         // { from, to, r, p } — cell transforms around the player
+  auras: [],         // { from, to, r, p, surface? } — cell transforms near player
   heals: {},         // element id -> hp per frame while touching it
   onDamage: [],      // callbacks fired when the player takes damage
   trampleHeal: 0,    // hp per plant broken by walking through it
+  stomp: false,      // Iron Boots: landing on any enemy crushes it
+  emitHeat: 0,       // Ember Heart: degrees/frame radiated into the temp field
 };
 
 // pristine copies of everything modifiers may touch
@@ -35,16 +37,19 @@ function resetModifiers() {
   const base = JSON.parse(JSON.stringify(BASELINE.reactions));
   for (const k in base) REACTIONS[k] = base[k];
   explosionScale = 1;
-  runState.mult = { fireDmg: 1, lavaDmg: 1, acidDmg: 1, burnTime: 1, speed: 1, jump: 1, manaRegen: 1 };
+  runState.mult = { fireDmg: 1, lavaDmg: 1, acidDmg: 1, burnTime: 1, speed: 1,
+                    jump: 1, manaRegen: 1, coldDmg: 1, heatDmg: 1 };
   runState.auras = [];
   runState.heals = {};
   runState.onDamage = [];
   runState.trampleHeal = 0;
+  runState.stomp = false;
+  runState.emitHeat = 0;
 }
 
 const MODIFIERS = [
   {
-    name: 'Pyromaniac',
+    name: 'Pyromaniac', tags: ['fire'],
     desc: 'The world is far more flammable and burns longer. Fire only tickles you.',
     apply() {
       for (let i = 0; i < NUM_ELEMENTS; i++) {
@@ -56,7 +61,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Fireproof Hide',
+    name: 'Fireproof Hide', tags: ['fire', 'survival'],
     desc: 'Fire barely hurts, lava is survivable, and you stop burning almost immediately.',
     apply() {
       runState.mult.fireDmg *= 0.15;
@@ -65,14 +70,16 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Frost Aura',
-    desc: 'Water near you freezes into solid ice. Walk across lakes; seal off floods.',
+    name: 'Frost Aura', tags: ['frost'],
+    desc: 'The surface of water near you freezes into a walkable crust. The depths stay liquid.',
     apply() {
-      runState.auras.push({ from: E.WATER, to: E.ICE, r: 5, p: 0.05 });
+      // surface-only: the pool below survives, so you can't accidentally
+      // freeze away the reservoir a boss fight depends on
+      runState.auras.push({ from: E.WATER, to: E.ICE, r: 5, p: 0.08, surface: true });
     },
   },
   {
-    name: 'Lava Strider',
+    name: 'Lava Strider', tags: ['fire', 'survival'],
     desc: 'Lava you approach crusts into stone, and what does touch you burns less.',
     unlock: { stat: 'wins', at: 1, hint: 'Win a run' },
     apply() {
@@ -81,7 +88,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Steam Sprite',
+    name: 'Steam Sprite', tags: ['fire', 'survival'],
     desc: 'Steam heals you and lingers far longer. Boil a lake, breathe it in.',
     apply() {
       runState.heals[E.STEAM] = 0.06;
@@ -90,7 +97,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Green Thumb',
+    name: 'Green Thumb', tags: ['nature', 'survival'],
     desc: 'Plants spread through water aggressively, and trampling them heals you.',
     apply() {
       addReaction(E.WATER, E.PLANT, E.PLANT, E.PLANT, 0.12);
@@ -98,7 +105,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Acid Blood',
+    name: 'Acid Blood', tags: ['acid'],
     desc: 'Taking damage makes you leak acid, and acid corrodes you far less.',
     unlock: { stat: 'kills', at: 15, hint: 'Kill 15 creatures' },
     apply() {
@@ -114,7 +121,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Demolitionist',
+    name: 'Demolitionist', tags: ['blast'],
     desc: 'Explosions are much bigger. Gunpowder is your friend. Probably.',
     unlock: { stat: 'bestDepth', at: 4, hint: 'Reach depth 4' },
     apply() {
@@ -122,7 +129,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Fleetfoot',
+    name: 'Fleetfoot', tags: ['mobility'],
     desc: 'Move faster and jump higher.',
     apply() {
       runState.mult.speed *= 1.3;
@@ -130,7 +137,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Powder Bomb',
+    name: 'Powder Bomb', tags: ['blast', 'wand'],
     desc: 'Your wand learns Powder Bomb: a lobbed charge with a devastating blast.',
     unlock: { stat: 'bestDepth', at: 3, hint: 'Reach depth 3' },
     apply() {
@@ -138,14 +145,14 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Acid Spit',
+    name: 'Acid Spit', tags: ['acid', 'wand'],
     desc: 'Your wand learns Acid Spit: melt terrain from a safe distance.',
     apply() {
       grantSpell('acid');
     },
   },
   {
-    name: 'Flamethrower',
+    name: 'Flamethrower', tags: ['fire', 'wand'],
     desc: 'Your wand learns Flamethrower: point blank, everything burns. Including, possibly, you.',
     unlock: { stat: 'kills', at: 10, hint: 'Kill 10 creatures' },
     apply() {
@@ -153,21 +160,21 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Arc Bolt',
+    name: 'Arc Bolt', tags: ['storm', 'wand'],
     desc: 'Your wand learns Arc Bolt: electricity that turns pools into kill zones.',
     apply() {
       grantSpell('arc');
     },
   },
   {
-    name: 'Overcharge',
+    name: 'Overcharge', tags: ['wand'],
     desc: 'Mana regenerates 80% faster. Cast with abandon.',
     apply() {
       runState.mult.manaRegen *= 1.8;
     },
   },
   {
-    name: 'Wand: Twin Cast',
+    name: 'Wand: Twin Cast', tags: ['wand'],
     desc: 'Every cast fires an extra projectile, at a slight cooldown cost.',
     unlock: { stat: 'bestDepth', at: 2, hint: 'Reach depth 2' },
     apply() {
@@ -176,14 +183,14 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Wand: Rapid Fire',
+    name: 'Wand: Rapid Fire', tags: ['wand'],
     desc: 'Your wand cools down 45% faster.',
     apply() {
       wandMods.cooldownMult *= 0.55;
     },
   },
   {
-    name: 'Wand: Amplifier',
+    name: 'Wand: Amplifier', tags: ['wand'],
     desc: 'Projectiles hit 50% harder and burst with a bigger splash.',
     apply() {
       wandMods.damageMult *= 1.5;
@@ -191,7 +198,7 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Wand: Bouncing Shots',
+    name: 'Wand: Bouncing Shots', tags: ['wand'],
     desc: 'Projectiles ricochet off terrain one more time before bursting.',
     unlock: { stat: 'kills', at: 25, hint: 'Kill 25 creatures' },
     apply() {
@@ -199,7 +206,38 @@ const MODIFIERS = [
     },
   },
   {
-    name: 'Tunneler',
+    name: 'Iron Boots', tags: ['mobility', 'survival'],
+    desc: 'Landing on any enemy crushes it, armor and all — then you bounce clear.',
+    apply() {
+      runState.stomp = true;
+    },
+  },
+  {
+    name: 'Winter Pelt', tags: ['frost', 'survival'],
+    desc: 'Hypothermia cannot touch you. Heat, though, bites much harder.',
+    apply() {
+      runState.mult.coldDmg *= 0;
+      runState.mult.heatDmg *= 1.6;
+    },
+  },
+  {
+    name: 'Furnace Heart', tags: ['fire', 'survival'],
+    desc: 'Heatstroke cannot touch you. The cold, though, bites much harder.',
+    apply() {
+      runState.mult.heatDmg *= 0;
+      runState.mult.coldDmg *= 1.6;
+    },
+  },
+  {
+    name: 'Ember Heart', tags: ['fire'],
+    desc: 'You radiate furnace heat: never cold, ice and snow melt around you — but water simmers away near you.',
+    unlock: { stat: 'kills', at: 20, hint: 'Kill 20 creatures' },
+    apply() {
+      runState.emitHeat = 2.0; // degrees/frame into the player's temp cells
+    },
+  },
+  {
+    name: 'Tunneler', tags: ['mobility'],
     desc: 'Stone, sand, and ice near you slowly crumble away. You are the shovel.',
     apply() {
       runState.auras.push({ from: E.STONE, to: E.EMPTY, r: 3, p: 0.03 });
@@ -211,15 +249,32 @@ const MODIFIERS = [
 
 resetModifiers(); // initialize runState.mult etc. at load
 
-// n random modifiers: unlocked only, avoiding already-taken while possible
+// n random modifiers: unlocked only, avoiding already-taken while possible.
+// Rolls are TAG-WEIGHTED: mods sharing tags with what you've already taken
+// show up more often, so runs drift into builds (fire run, wand run, ...)
+// instead of staying uniform grab-bags.
 function rollChoices(n, takenNames) {
   const available = MODIFIERS.filter(m =>
     typeof isUnlocked !== 'function' || isUnlocked(m));
   let pool = available.filter(m => !takenNames.includes(m.name));
   if (pool.length < n) pool = available.slice();
+  const takenTags = {};
+  for (const m of MODIFIERS) {
+    if (!takenNames.includes(m.name)) continue;
+    for (const tg of m.tags || []) takenTags[tg] = (takenTags[tg] || 0) + 1;
+  }
+  const weight = m => {
+    let w = 1;
+    for (const tg of m.tags || []) w += 1.5 * (takenTags[tg] || 0);
+    return w;
+  };
   const picks = [];
   while (picks.length < n && pool.length > 0) {
-    const k = (rand() * pool.length) | 0;
+    let total = 0;
+    for (const m of pool) total += weight(m);
+    let r = rand() * total;
+    let k = 0;
+    while (k < pool.length - 1 && (r -= weight(pool[k])) > 0) k++;
     picks.push(pool.splice(k, 1)[0]);
   }
   return picks;
@@ -246,7 +301,10 @@ function applyAuras() {
         if (dx * dx + dy * dy > r2 || rand() >= a.p) continue;
         if (solidTo && x >= bx0 && x <= bx1 && y >= by0 && y <= by1) continue;
         const i = idx(x, y);
-        if (grid[i] === a.from) setCell(i, a.to);
+        if (grid[i] !== a.from) continue;
+        // surface auras only touch cells open to the air above (frost crust)
+        if (a.surface && grid[idx(x, y - 1)] !== E.EMPTY) continue;
+        setCell(i, a.to);
       }
     }
   }

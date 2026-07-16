@@ -164,9 +164,26 @@ function updatePlayer() {
   // 55, cold biomes pull you toward hypothermia, and only a near-furnace
   // heat pushes toward heatstroke (lava/fire already do direct damage). Cold
   // is the sensitive side (it's the seasons threat); wet doubles the chill.
-  const ambient = tempAt(
-    Math.max(0, Math.min(SIM_W - 1, Math.round(player.x + player.w / 2))),
-    Math.max(0, Math.min(SIM_H - 1, Math.round(player.y + player.h / 2))));
+  const pcx = Math.max(0, Math.min(SIM_W - 1, Math.round(player.x + player.w / 2)));
+  const pcy = Math.max(0, Math.min(SIM_H - 1, Math.round(player.y + player.h / 2)));
+  // Ember Heart: radiate real heat into the temperature field — the sim does
+  // the rest (snow melts, ice thaws, water simmers, and you're never cold).
+  // Thermostat caps mean it warms you toward comfort but never cooks you in
+  // a biome that's already hot.
+  if (runState.emitHeat > 0) {
+    const tx = pcx >> 2, ty = pcy >> 2;
+    const warmCell = (x, y, cap, rate) => {
+      if (x < 0 || x >= TEMP_W || y < 0 || y >= TEMP_H) return;
+      const j = y * TEMP_W + x;
+      if (temp[j] < cap) temp[j] = Math.min(cap, temp[j] + rate);
+    };
+    warmCell(tx, ty, 50, runState.emitHeat);
+    warmCell(tx - 1, ty, 32, runState.emitHeat * 0.5);
+    warmCell(tx + 1, ty, 32, runState.emitHeat * 0.5);
+    warmCell(tx, ty - 1, 32, runState.emitHeat * 0.5);
+    warmCell(tx, ty + 1, 32, runState.emitHeat * 0.5);
+  }
+  const ambient = tempAt(pcx, pcy);
   let target = warmthTarget(ambient);
   if (player.burning > 0) target = 110;                 // on fire = plenty warm
   else if (touchedWater && ambient < 20) target -= 15;  // wind-chill in cold water
@@ -174,8 +191,8 @@ function updatePlayer() {
   target = Math.max(-5, Math.min(120, target));
   const rate = target < player.warmth ? (touchedWater ? 0.06 : 0.03) : 0.12;
   player.warmth = Math.max(-5, Math.min(110, player.warmth + (target - player.warmth) * rate));
-  if (player.warmth < 20) dmg += (20 - player.warmth) * 0.004;      // hypothermia
-  else if (player.warmth > 90) dmg += (player.warmth - 90) * 0.010; // heatstroke
+  if (player.warmth < 20) dmg += (20 - player.warmth) * 0.004 * m.coldDmg;      // hypothermia
+  else if (player.warmth > 90) dmg += (player.warmth - 90) * 0.010 * m.heatDmg; // heatstroke
   if (player.burning > 0) {
     player.burning--;
     dmg += 0.08 * m.fireDmg;
