@@ -32,7 +32,7 @@ function _packInputWord() {
   if (k['d'] || k['arrowright']) w |= 2;
   if (k['w'] || k['arrowup'] || k[' ']) w |= 4;
   if (input.painting) w |= 8;
-  w |= (wand.selected & 15) << 4;
+  w |= (wand.sel & 15) << 4;
   w |= Math.max(0, Math.min(511, input.curX | 0)) << 8;
   w |= Math.max(0, Math.min(255, input.curY | 0)) << 17;
   return w;
@@ -106,6 +106,32 @@ function stopReplay() {
   replayPlay.active = false;
 }
 
+// --- share: a replay is just a small JSON blob — copy/paste to share a run --
+
+function exportReplayString() {
+  const data = loadSavedReplay();
+  return data ? JSON.stringify(data) : null;
+}
+
+// Validates and stores a pasted replay; returns the data or null
+function importReplayString(str) {
+  try {
+    const data = JSON.parse(str);
+    if (!data || data.v !== 1 || typeof data.seed !== 'string' ||
+        !Array.isArray(data.words) || !Array.isArray(data.counts) ||
+        data.words.length !== data.counts.length) return null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('cinder-replay', JSON.stringify({
+          v: 1, seed: data.seed, words: data.words, counts: data.counts,
+          events: data.events || [],
+        }));
+      }
+    } catch (e) { /* storage full: playback still works this session */ }
+    return data;
+  } catch (e) { return null; }
+}
+
 // Called at the top of every fixed step (before applyInput / sim updates).
 // Overwrites live input from the recording; auto-picks recorded synergies
 // while the choice overlay is up (steps don't advance during choosing, so
@@ -134,7 +160,7 @@ function replayStep() {
   const w = replayPlay.words[replayPlay.wi];
   input.keys = { a: !!(w & 1), d: !!(w & 2), w: !!(w & 4) };
   input.painting = !!(w & 8);
-  wand.selected = (w >> 4) & 15;
+  wand.sel = Math.min((w >> 4) & 15, wand.spells.length - 1);
   input.curX = (w >> 8) & 511;
   input.curY = (w >> 17) & 255;
 

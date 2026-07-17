@@ -6,17 +6,18 @@ Creatures live *inside* the element sim — they burn, drown, corrode, and
 get caught in explosions like anything else. Each biome leads with a
 signature enemy; bosses guard the portal on depths 3 and 6.
 
-| Creature | Found in | HP | Speed | Contact | Moves | Behavior |
-| --- | --- | ---: | ---: | ---: | :---: | --- |
-| Grub | Stone Caverns, Overgrown Vault, Ice Caves, Oil Caverns, Rusted Works | 18 | 0.35 | 7 | walks | contact damage |
-| Wisp | Stone Caverns, Oil Caverns, Volcanic Depths | 10 | 0.55 | 6 | flies | trails fire; bursts into fire on death; dies in water |
-| Bloat | Stone Caverns, Overgrown Vault, Oil Caverns, Volcanic Depths, Rusted Works | 26 | 0.22 | 4 | flies | explodes on death |
-| Spitter | Stone Caverns, Overgrown Vault, Ice Caves | 14 | 0.15 | 5 | walks | lobs acid globs |
-| Shaleback | Stone Caverns, Ice Caves, Rusted Works | 44 | 0.26 | 9 | walks | armored (−50% weapon damage) |
-| Pouncer | Overgrown Vault | 16 | 0.5 | 8 | walks | leaps at you |
-| Frostling | Ice Caves | 20 | 0.34 | 5 | flies | chilling touch (−16 warmth) |
-| Seeper | Oil Caverns | 30 | 0.2 | 5 | walks | trails oil; fireproof |
-| Magmite | Volcanic Depths | 40 | 0.22 | 10 | walks | trails lava; fireproof |
-| Voltbug | Rusted Works | 18 | 0.4 | 6 | flies | electrifies nearby water |
-| Magmaworm | Boss (depth 3 & 6) | 260 | 0.32 | 16 | burrows | **boss**; armored (−100% weapon damage); trails lava; fireproof; tunnels through terrain |
-| Tempest | Boss (depth 3 & 6) | 240 | 0.42 | 12 | flies | **boss**; armored (−70% weapon damage); electrifies nearby water; lobs arcing electricity; fireproof |
+| | Creature | Found in | HP | Speed | Contact | Moves | Behavior |
+| :---: | --- | --- | ---: | ---: | ---: | :---: | --- |
+| ![grub](sprites/c-grub.png) | Grub | Stone Caverns, Overgrown Vault, Ice Caves, Oil Caverns, Rusted Works | 18 | 0.35 | 7 | walks | contact damage |
+| ![wisp](sprites/c-wisp.png) | Wisp | Stone Caverns, Oil Caverns, Volcanic Depths | 10 | 0.55 | 6 | flies | trails fire; bursts into fire on death; dies in water |
+| ![bloat](sprites/c-bloat.png) | Bloat | Stone Caverns, Overgrown Vault, Oil Caverns, Volcanic Depths, Rusted Works | 26 | 0.22 | 4 | flies | explodes on death |
+| ![spitter](sprites/c-spitter.png) | Spitter | Stone Caverns, Overgrown Vault, Ice Caves | 14 | 0.15 | 5 | walks | lobs acid globs |
+| ![shaleback](sprites/c-shaleback.png) | Shaleback | Stone Caverns, Ice Caves, Rusted Works | 44 | 0.26 | 9 | walks | armored (−50% weapon damage) |
+| ![pouncer](sprites/c-pouncer.png) | Pouncer | Overgrown Vault | 16 | 0.5 | 8 | walks | leaps at you |
+| ![frostling](sprites/c-frostling.png) | Frostling | Ice Caves | 20 | 0.34 | 5 | flies | chilling touch (−16 warmth) |
+| ![seeper](sprites/c-seeper.png) | Seeper | Oil Caverns | 30 | 0.2 | 5 | walks | trails oil; fireproof |
+| ![magmite](sprites/c-magmite.png) | Magmite | Volcanic Depths | 40 | 0.22 | 10 | walks | trails lava; fireproof |
+| ![voltbug](sprites/c-voltbug.png) | Voltbug | Rusted Works | 18 | 0.4 | 6 | flies | electrifies nearby water |
+| ![magmaworm](sprites/boss-magmaworm.png) | Magmaworm | Boss (depth 3 & 6) | 260 | 0.32 | 16 | burrows | **boss**; armored (−100% weapon damage); trails lava; fireproof; tunnels through terrain |
+| ![tempest](sprites/boss-tempest.png) | Tempest | Boss (depth 3 & 6) | 240 | 0.42 | 12 | flies | **boss**; armored (−70% weapon damage); electrifies nearby water; lobs arcing electricity; fireproof |
+| ![overgrowth](sprites/boss-overgrowth.png) | Overgrowth | Boss (depth 3 & 6) | 250 | 0.22 | 14 | walks | **boss**; armored (−70% weapon damage); lobs rooting spore globs; regenerates |

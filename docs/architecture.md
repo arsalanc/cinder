@@ -14,13 +14,13 @@ runs from `file://`. Load order matters (each file assumes the ones above it):
 | `js/sim.js` | **Simulation core.** Cell grid (structure-of-arrays typed arrays), per-frame update, movement rules, reactions, explosions, the temperature field. Knows nothing about rendering or input. |
 | `js/worldgen.js` | **Procedural generation.** Seeded PRNG + value noise, cave carving, connectivity pass, Voronoi biome regions, liquid pools, decoration, machinery set-pieces. |
 | `js/player.js` | **Player entity.** AABB with pixel collision against the grid, swimming, jetpack, hazard damage, burning + body-warmth status. The sim never sees the player. |
-| `js/spells.js` | **Wand & spells.** Mana, cooldowns, projectiles that paint elements on impact; wand-composition modifiers. Dig Blast is always in the loadout (anti-soft-lock). |
-| `js/synergies.js` | **Synergy system.** Run modifiers that mutate live element data and `runState`. Baseline snapshot for clean resets. |
-| `js/creatures.js` | **Creatures.** Data-typed critters that live in the element sim; shared chase/wander AI with per-type behavior flags. |
+| `js/spells.js` | **Wand & spells.** Mana, cooldowns, projectiles that paint elements on impact; wand-composition modifiers; spell **evolutions** (`spellForm`, memoized on the mod list); all 8×8 pixel icons (`ICON_PX` / `MOD_ICONS` / `TROPHY_ICONS`). Dig Blast is always in the loadout (anti-soft-lock). |
+| `js/synergies.js` | **Synergy system.** Tagged run modifiers that mutate live element data and `runState`; tag-weighted rolls. Baseline snapshot for clean resets. |
+| `js/creatures.js` | **Creatures.** Data-typed critters that live in the element sim; shared chase/wander AI with per-type behavior flags. All spawns go through `makeCreature`, all touch damage through `contactPlayer`. The two guardians are extracted state machines (`updateWorm`, `updateTempest`); elites reuse the vulnerability-window grammar. |
 | `js/audio.js` | **Sound.** Fully procedural WebAudio (oscillators + filtered noise), no asset files. Throttled per-sound; mute button. |
 | `js/weather.js` | **Weather.** Rain / cold snaps / storms; real lightning; a creative-mode override. |
-| `js/game.js` | **Run flow.** Level/portal placement with reachability check, shards, creature/boss spawning, depth progression, overlays, meta-progression. |
-| `js/replay.js` | **Replays.** Records packed input per sim step (+ synergy/respawn events); plays them back deterministically. Daily-seed runs. |
+| `js/game.js` | **Run flow.** Level/portal placement with reachability check, shards, relic vaults (traps included), boss depths + endless descent, overlays (choice / end / collection), death recap, daily scoreboard, meta-progression. |
+| `js/replay.js` | **Replays.** Records packed input per sim step (+ synergy/respawn events); plays them back deterministically. Share strings (export/import) for the daily-seed loop. |
 | `js/render.js` | ImageData renderer at sim resolution, scaled up with crisp pixels; camera (follow + sandbox zoom). |
 | `js/input.js` | Pointer painting with stroke interpolation, brush, zoom/pan, the Lightning tool, keyboard shortcuts. |
 | `js/main.js` | Bootstrap, palette/tabs UI, HUD, fixed-timestep main loop. |
@@ -82,11 +82,13 @@ or not it's on screen.
 
 Headless smoke tests load the JS into a Node `vm` context (browser APIs only
 run inside init functions, which the tests never call) and assert on grid
-state after N steps. There are ~18 suites / 160+ tests in the scratchpad
+state after N steps. The suites live in **`tests/`** — 22 files, 220+ tests —
 covering the sim, worldgen, player, runs, spells, determinism, creatures,
-temperature, seasons, industry, replays, and more. The suite is the safety
-net for a sim where one probability tweak can cascade — run it after any
-change to sim, worldgen, player, or creatures.
+bosses, elites, vaults, evolutions, temperature, seasons, industry, replays,
+and more. `node tests/run.js` runs everything in parallel (~5 minutes);
+`node tests/run.js boss evo` filters by name. The suite is the safety net for
+a sim where one probability tweak can cascade — run it after any change to
+sim, worldgen, player, or creatures.
 
 The doc generator uses the same `vm`-load trick: `node tools/gen-docs.js`
 snapshots the data tables (JSON drops the `impact`/`apply` methods for free)

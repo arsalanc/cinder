@@ -371,7 +371,96 @@ boss windows). Re-grounding the power-up pool and the run loop in them:
   carry a gold **⚡ evolves** badge. Tag-weighted rolls make evolutions the
   natural payoff of the build gravity they create.
 
+**Quality-of-the-loop batch (done):**
+- **Tests moved into the repo** — `tests/` now holds all 22 headless suites
+  (paths relative) plus `tests/run.js`, a parallel runner (6 concurrent
+  node processes, `node tests/run.js [filter…]`) that runs the full 220-test
+  sweep in ~5 minutes.
+- **Death recap** — the player tracks their worst recent damage source
+  (`player.lastHurt`); the end screen now reads "You died at depth 4 —
+  melted by lava / slain by an elite shaleback / died of heatstroke…".
+- **Daily scoreboard** — daily-seed runs record a local best per day
+  (depth, kills, won; better attempts only) shown under the Daily Run
+  button and updated at run end.
+- **Replay sharing** — Share Replay copies the recording as a JSON string
+  to the clipboard; Load Replay accepts a pasted string (validated) and
+  plays it back. Deterministic replays + shareable strings + daily seeds =
+  the full compare-runs loop, no backend.
+- **Depth-2 lesser elite** — half the bulk, same vulnerability-window
+  rhythm and rewards halved; the gold-pulse grammar is now taught two
+  depths before the worm demands it.
+
+**The Overgrowth — third guardian (done):**
+- A fungal colossus completing the elemental key triangle: water quenches
+  the worm, water shorts the tempest, **fire dries the grove**. It
+  **regenerates relentlessly** (0.06/f) through anything except burning and
+  its open window, so plain damage stalls — the fight forces the fire tool.
+- Core rule with the fiction built in: **green wood doesn't burn, it
+  dries.** Fire deals *zero* damage to the unscorched grove — it only
+  builds scorch (90 burning frames). At the threshold the dried husk cracks
+  **SCORCHED** (EXPOSED: 2× damage, stompable, no regen) — and a scorched
+  husk *does* torch, so fire becomes a damage tool inside the window it
+  opened. Afterward fresh sap won't catch (~4s regrow) and wet bark
+  recovers scorch if the fire dies.
+- A slow creeping tank: seeds plants/fungus behind it (arena control your
+  fire also clears), mortars **spore globs** over cover (they take root and
+  puff choking smoke), and at phase breaks **BLOOMS** — rooted and
+  invulnerable, raining seeds from the sky and surging vines from the
+  floor.
+- Arena: a tinderbox — WOOD pillars with plant caps (cover that doubles as
+  fuel), two open oil pockets for big fire plays, a modest pool for
+  self-defense, Overgrown Vault ambience.
+- **Guardians are now seed-assigned**: `bossKeyFor` hashes the run seed —
+  two *different* guardians per descent (depths 3 and 6), and the endless
+  rotation cycles all three without repeats. `#boss=overgrowth` hunts a
+  matching seed.
+- Trophy: `groveKills` → **Heartseed** (nature/survival): foliage never
+  slows you and trampling it heals.
+
+**Doc sprites (done):** the generated reference pages now show the actual
+in-game pixel art — `tools/gen-docs.js` grew a dependency-free PNG writer
+(node zlib + hand-rolled chunks) that renders every spell/evolution/synergy
+glyph and every creature's faithful in-game look (guardians use their trophy
+portraits) to `docs/sprites/`, and the bestiary/spells/synergies tables lead
+with a sprite column. A test asserts every documented sprite file exists.
+
+**Feel batch (done):**
+- **Sandbox save/load** — `saveBuildString`/`loadBuildString` in sim.js
+  (RLE grid + rounded ambient-temperature field, JSON): Save Build stores to
+  localStorage *and* copies a shareable string; Load Build restores the
+  saved one or accepts a paste. Element-identical round-trip is tested.
+- **First-run onboarding** — a one-time "Welcome to the depths" overlay on
+  a fresh profile's first run (shards → portal, Dig Blast anti-trap, the
+  sim is real, gold pulse = strike window). Session-once, gated on
+  `meta.runs === 0`, never fires headless or during replay playback.
+- **Creature pixel art** — the 10-creature roster wears authored 8×8
+  sprites in-game (`CREATURE_PX`, shared icon palette, cached 8×8 canvases
+  stretched to each body box, flipped to face direction). Combat states
+  (hurt/exposed/charging/bloom/burning) still flash FLAT — the color
+  language players know is untouched. The bestiary inherits the art
+  automatically through the sprite pipeline; guardians keep their
+  state-driven boxes on purpose (their colors are their telegraphs).
+- **Health-economy item dropped after verification**: `placeSpawn` already
+  restores full HP each depth — the attrition concern was wrong; pressure
+  is per-level by design.
+
 **Batch 4 (candidate ideas):**
+- **Glacier Jet rework** (playtest 2026-07: low damage — 6/hit vs Water
+  Jet's 2 — and the terrain crust self-traps: the freeze exclusion is only
+  body+1, so firing at the water ahead builds a wall you walk into). The
+  fix: move the freeze off the terrain and onto the enemy —
+  - direct hits *encase* the creature: new `frozenT` (~90f) statue state —
+    no movement/attacks/contact, ice-blue tint, **1.5× damage taken** —
+    slotting into the vulnerability-window grammar (emergent: Iron Boots
+    stomp on a frozen target = shatter; freeze a pouncer mid-leap).
+  - bosses resist the statue lock (would break their cycle designs), but
+    the jet is still water so it keeps feeding `wet` → quench/short.
+  - widen the crust exclusion to ~4 cells around the player: bridges build
+    *ahead* of you (skate onto them), never at your feet.
+  - keep raw damage modest (~7) — the freeze multiplier is the budget.
+  - mechanism: optional `sp.onHit(creature)` hook at the projectile-hit
+    site, which also future-proofs other evolutions (Dissolver corrode DoT
+    etc.). Deferred for now at the user's call — revisit after more play.
 - Daily-run scoreboard for endless depth reached; ghost replays.
 - Elite affixes (a frost elite in the Oil Caverns, etc.) for cross-biome
   surprise.

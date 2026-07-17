@@ -396,6 +396,10 @@
           <button id="btn-daily" title="Run today's shared seed">Daily Run</button>
           <button id="btn-replay" title="Watch your last finished run">&#9654; Replay</button>
         </div>
+        <div class="controls">
+          <button id="btn-save-build" title="Save this build (and copy a shareable string)">Save Build</button>
+          <button id="btn-load-build" title="Load your saved build, or paste a shared one">Load Build</button>
+        </div>
         <div class="hint">
           Left-drag: paint &middot; Erase: palette tile<br>
           Scroll: zoom &middot; Right-drag: pan<br>
@@ -429,6 +433,11 @@
         <button id="btn-sound">Sound: On</button>
         <button id="btn-collection">Collection</button>
       </div>
+      <div class="controls">
+        <button id="btn-export">Share Replay</button>
+        <button id="btn-import">Load Replay</button>
+      </div>
+      <div id="daily-best" class="hud"></div>
       <div id="meta" class="meta"></div>
       <div class="hud">
         Brush <b id="hud-brush">4</b> &middot;

@@ -873,6 +873,58 @@ function clearSim() {
   ambientTemp.fill(TEMP_DEFAULT);
 }
 
+// --- sandbox build save/load -------------------------------------------------
+// A build is the grid (RLE — sand piles compress beautifully) plus the
+// ambient-temperature field (rounded; an ice build must stay cold), as a
+// JSON string small enough for localStorage or a copy/paste share.
+
+function saveBuildString() {
+  const runs = [];
+  let cur = grid[0], n = 1;
+  for (let i = 1; i < CELLS; i++) {
+    if (grid[i] === cur && n < 0xFFFF) n++;
+    else { runs.push(cur, n); cur = grid[i]; n = 1; }
+  }
+  runs.push(cur, n);
+  const amb = [];
+  let ac = Math.round(ambientTemp[0]), an = 1;
+  for (let i = 1; i < TEMP_CELLS; i++) {
+    const v = Math.round(ambientTemp[i]);
+    if (v === ac && an < 0xFFFF) an++;
+    else { amb.push(ac, an); ac = v; an = 1; }
+  }
+  amb.push(ac, an);
+  return JSON.stringify({ v: 1, w: SIM_W, h: SIM_H, runs, amb });
+}
+
+// Restores a saved build; returns true on success, false on a bad string
+function loadBuildString(str) {
+  let d;
+  try { d = JSON.parse(str); } catch (e) { return false; }
+  if (!d || d.v !== 1 || d.w !== SIM_W || d.h !== SIM_H ||
+      !Array.isArray(d.runs)) return false;
+  clearSim();
+  let i = 0;
+  for (let k = 0; k + 1 < d.runs.length && i < CELLS; k += 2) {
+    const id = d.runs[k], n = d.runs[k + 1];
+    if (typeof id !== 'number' || id < 0 || id >= NUM_ELEMENTS) return false;
+    for (let j = 0; j < n && i < CELLS; j++, i++) {
+      if (id !== E.EMPTY) setCell(i, id); // setCell rebuilds shade/life
+    }
+  }
+  if (i !== CELLS) return false;
+  if (Array.isArray(d.amb)) {
+    let a = 0;
+    for (let k = 0; k + 1 < d.amb.length && a < TEMP_CELLS; k += 2) {
+      for (let j = 0; j < d.amb[k + 1] && a < TEMP_CELLS; j++, a++) {
+        ambientTemp[a] = d.amb[k];
+      }
+    }
+    temp.set(ambientTemp);
+  }
+  return true;
+}
+
 // A little starter scene so the first impression isn't a blank void
 function seedScene() {
   clearSim();

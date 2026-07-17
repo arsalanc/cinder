@@ -183,20 +183,29 @@ function main() {
   selectElement(E.SAND);
   updateHUD();
   updateRunHUD(); // shows persistent meta stats even before a run
-  doGenerate(); // start on a procedural world
+  // open on a blank canvas with calm skies — creating starts from nothing
+  // (Generate / a #seed= hash / entering a run all still build worlds)
+  clearSim();
+  setWeatherOverride('off');
+  updateWeatherUI();
   if (location.hash.startsWith('#seed=')) {       // load a specific seed
     seedInput.value = decodeURIComponent(location.hash.slice(6));
     doGenerate();
   }
   if (location.hash === '#play') togglePlayMode(); // dev hook: straight into a run
   if (location.hash.startsWith('#boss')) {          // dev: drop straight into a boss arena
-    // #boss → magma worm (depth 3); #boss=tempest → the final boss; #boss=4 → depth 4
+    // #boss → depth-3 guardian; #boss=<name> → that guardian; #boss=4 → depth 4
     const arg = location.hash.slice(5).replace(/^=/, '').toLowerCase();
-    const depth = arg === 'tempest' ? WIN_DEPTH
-      : arg === 'magmaworm' || arg === '' ? 3
-      : (parseInt(arg, 10) || 3);
     togglePlayMode();
-    run.depth = depth;
+    if (GUARDIANS.includes(arg)) {
+      // assignment is seed-driven now: hunt for a seed that rolls this one
+      for (let n = 0; n < 200 && bossKeyFor(3) !== arg; n++) {
+        run.seed = 'dev-' + arg + '-' + n;
+      }
+      run.depth = 3;
+    } else {
+      run.depth = parseInt(arg, 10) || 3;
+    }
     beginLevel();
   }
   if (location.hash === '#zoom') setSandboxZoom(4); // dev hook: zoomed sandbox view
@@ -225,6 +234,40 @@ function main() {
   });
   document.getElementById('btn-daily').addEventListener('click', startDailyRun);
   document.getElementById('btn-replay').addEventListener('click', watchReplay);
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const str = exportReplayString();
+    if (!str) { window.prompt('No replay recorded yet — finish a run first.', ''); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(str).then(
+        () => window.prompt('Replay copied to clipboard — paste it anywhere:', str.slice(0, 60) + '…'),
+        () => window.prompt('Copy your replay:', str));
+    } else window.prompt('Copy your replay:', str);
+  });
+  document.getElementById('btn-import').addEventListener('click', () => {
+    const str = window.prompt('Paste a shared replay:');
+    if (!str) return;
+    if (importReplayString(str)) watchReplay();
+    else window.prompt('That did not look like a CINDER replay.', '');
+  });
+  updateDailyHUD();
+  document.getElementById('btn-save-build').addEventListener('click', () => {
+    const str = saveBuildString();
+    try { localStorage.setItem('cinder-build', str); } catch (e) { /* full */ }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(str).catch(() => {});
+    }
+    hudStatus.textContent = 'build saved (and copied to clipboard)';
+  });
+  document.getElementById('btn-load-build').addEventListener('click', () => {
+    if (playMode) return; // builds are a sandbox thing
+    let stored = null;
+    try { stored = localStorage.getItem('cinder-build'); } catch (e) { /* none */ }
+    const str = window.prompt(
+      stored ? 'Load saved build (or paste a shared one):' : 'Paste a shared build:',
+      stored || '');
+    if (!str) return;
+    if (!loadBuildString(str)) window.prompt('That did not look like a CINDER build.', '');
+  });
   seedInput.addEventListener('keydown', e => {
     e.stopPropagation(); // don't trigger sim shortcuts while typing a seed
     if (e.key === 'Enter') { doGenerate(); seedInput.blur(); }

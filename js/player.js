@@ -22,6 +22,7 @@ const player = {
   jetting: false,
   warmth: 60,          // body warmth 0-100: falls in the cold, rises by heat
   onIce: false,        // standing on ice — low traction
+  lastHurt: '',        // what hurt you most recently (the death recap)
 };
 
 // Solid for the player: static materials and powders. Liquids/gases/fire are
@@ -78,6 +79,7 @@ function placeSpawn(px, py) {
   player.hurtCd = 0;
   player.fuel = player.maxFuel;
   player.warmth = 60;
+  player.lastHurt = '';
 }
 
 function spawnPlayer() {
@@ -113,6 +115,7 @@ function spawnPlayer() {
   player.hurtCd = 0;
   player.fuel = player.maxFuel;
   player.warmth = 60;
+  player.lastHurt = '';
 }
 
 function updatePlayer() {
@@ -126,6 +129,12 @@ function updatePlayer() {
   // --- sample the cells we overlap: liquids, hazards, healing, vegetation
   const m = runState.mult;
   let dmg = 0, liquidCells = 0, touchedWater = false;
+  // track the frame's worst damage source so the death screen can name it
+  let worstHit = 0, hitBy = null;
+  const hurt = (amt, label) => {
+    dmg += amt;
+    if (amt > worstHit) { worstHit = amt; hitBy = label; }
+  };
   const plantCells = [];
   const x0 = Math.floor(player.x), x1 = Math.ceil(player.x + player.w) - 1;
   const y0 = Math.floor(player.y), y1 = Math.ceil(player.y + player.h) - 1;
@@ -138,13 +147,13 @@ function updatePlayer() {
       if (TYPE[id] === T.LIQUID) liquidCells++;
       if (id === E.WATER) touchedWater = true;
       else if (id === E.PLANT) plantCells.push(i);
-      else if (id === E.FIRE) { dmg += 0.25 * m.fireDmg; player.burning = Math.max(player.burning, 160 * m.burnTime); }
-      else if (id === E.LAVA) { dmg += 1.1 * m.lavaDmg; player.burning = 240 * m.burnTime; }
-      else if (id === E.MOLTEN) { dmg += 1.2 * m.lavaDmg; player.burning = 240 * m.burnTime; }
-      else if (id === E.ACID) dmg += 0.5 * m.acidDmg;
-      else if (id === E.ELEC) dmg += 1.2 * m.elecDmg;
-      else if (id === E.EWATER) dmg += 0.7 * m.elecDmg;
-      else if (id === E.SMOKE) dmg += 0.015; // choking — mild, but adds up
+      else if (id === E.FIRE) { hurt(0.25 * m.fireDmg, 'burned alive'); player.burning = Math.max(player.burning, 160 * m.burnTime); }
+      else if (id === E.LAVA) { hurt(1.1 * m.lavaDmg, 'melted by lava'); player.burning = 240 * m.burnTime; }
+      else if (id === E.MOLTEN) { hurt(1.2 * m.lavaDmg, 'cooked by molten metal'); player.burning = 240 * m.burnTime; }
+      else if (id === E.ACID) hurt(0.5 * m.acidDmg, 'dissolved by acid');
+      else if (id === E.ELEC) hurt(1.2 * m.elecDmg, 'electrocuted');
+      else if (id === E.EWATER) hurt(0.7 * m.elecDmg, 'electrocuted in live water');
+      else if (id === E.SMOKE) hurt(0.015, 'choked on smoke'); // mild, but adds up
       const heal = runState.heals[id];
       if (heal) player.hp = Math.min(player.maxHp, player.hp + heal);
     }
@@ -193,11 +202,11 @@ function updatePlayer() {
   target = Math.max(-5, Math.min(120, target));
   const rate = target < player.warmth ? (touchedWater ? 0.06 : 0.03) : 0.12;
   player.warmth = Math.max(-5, Math.min(110, player.warmth + (target - player.warmth) * rate));
-  if (player.warmth < 20) dmg += (20 - player.warmth) * 0.004 * m.coldDmg;      // hypothermia
-  else if (player.warmth > 90) dmg += (player.warmth - 90) * 0.010 * m.heatDmg; // heatstroke
+  if (player.warmth < 20) hurt((20 - player.warmth) * 0.004 * m.coldDmg, 'froze to death');      // hypothermia
+  else if (player.warmth > 90) hurt((player.warmth - 90) * 0.010 * m.heatDmg, 'died of heatstroke'); // heatstroke
   if (player.burning > 0) {
     player.burning--;
-    if (!runState.fireWarms) dmg += 0.08 * m.fireDmg;
+    if (!runState.fireWarms) hurt(0.08 * m.fireDmg, 'burned to death');
     // shed a lick of flame above the head now and then
     const hx = Math.round(player.x + player.w / 2), hy = y0 - 1;
     if (rand() < 0.12 && hy > 0 && grid[idx(hx, hy)] === E.EMPTY) {
@@ -223,7 +232,7 @@ function updatePlayer() {
     }
   }
   const targetVx = move * (player.inLiquid ? 0.45 : 0.75) * m.speed
-                 * (inPlants ? 0.55 : 1);    // foliage is thick
+                 * (inPlants && !runState.plantStride ? 0.55 : 1); // foliage is thick
   if (player.onIce && !player.inLiquid) {
     // grip 0.08 gliding, a touch more when actively braking/turning
     const grip = move === 0 ? 0.03 : 0.08;
@@ -311,6 +320,7 @@ function updatePlayer() {
   }
 
   if (dmg > 0) {
+    if (hitBy) player.lastHurt = hitBy;
     for (const hook of runState.onDamage) hook(dmg);
     if (dmg > 0.2 && simFrame % 25 === 0) playSfx('hurt');
   }

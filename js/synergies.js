@@ -19,6 +19,7 @@ const runState = {
   lightningWard: false, // Storm Caller: sky bolts never strike near you
   fireWarms: false,  // Wormheart: burning warms you instead of harming you
   arcLightning: false, // Stormcore: Arc Bolt impacts call down real lightning
+  plantStride: false, // Heartseed: foliage never slows you
 };
 
 // pristine copies of everything modifiers may touch
@@ -54,6 +55,7 @@ function resetModifiers() {
   runState.lightningWard = false;
   runState.fireWarms = false;
   runState.arcLightning = false;
+  runState.plantStride = false;
 }
 
 const MODIFIERS = [
@@ -253,6 +255,15 @@ const MODIFIERS = [
     unlock: { stat: 'tempestKills', at: 1, hint: 'Slay the Tempest' },
     apply() {
       runState.arcLightning = true;
+    },
+  },
+  {
+    name: 'Heartseed', tags: ['nature', 'survival'],
+    desc: 'The grove accepts you: foliage parts for you instead of slowing you, and trampling it heals.',
+    unlock: { stat: 'groveKills', at: 1, hint: 'Slay the Overgrowth' },
+    apply() {
+      runState.plantStride = true;
+      runState.trampleHeal += 0.5;
     },
   },
   {

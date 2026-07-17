@@ -247,12 +247,21 @@ function spellTagCount(tag) {
 
 // The live form of a spell: base, or base overlaid with its evo block once
 // the run holds enough matching-tag synergies. Derived purely from run.mods,
-// so replays evolve identically.
+// so replays evolve identically. Memoized — forms only change when the mod
+// list does (the stamp catches both appends and wholesale swaps in tests).
+let _formCache = { stamp: null, forms: {} };
 function spellForm(key) {
   const sp = SPELLS[key];
   if (!sp.evo) return sp;
-  return spellTagCount(sp.evo.tag) >= (sp.evo.need || 2)
-    ? Object.assign({}, sp, sp.evo) : sp;
+  const mods = (typeof run !== 'undefined' && run.active) ? run.mods : null;
+  const stamp = mods ? mods.length + ':' + (mods[mods.length - 1] || '') : null;
+  if (_formCache.stamp !== stamp) _formCache = { stamp, forms: {} };
+  let f = _formCache.forms[key];
+  if (!f) {
+    f = _formCache.forms[key] = spellTagCount(sp.evo.tag) >= (sp.evo.need || 2)
+      ? Object.assign({}, sp, sp.evo) : sp;
+  }
+  return f;
 }
 
 // choice-overlay badge: which held spells would this pick evolve?
@@ -722,6 +731,15 @@ MOD_ICONS['Wormheart'] = [
   '..rRRr..',
   '...rr...',
   '........'];
+MOD_ICONS['Heartseed'] = [
+  '.gg..gg.',
+  'gGGggGGg',
+  'gGGGGGGg',
+  'gGhwwhGg',
+  '.gGhhGg.',
+  '..gGGg..',
+  '...gg...',
+  '...hh...'];
 MOD_ICONS['Stormcore'] = [
   '.bb..bb.',
   'bBBbbBBb',
@@ -761,6 +779,15 @@ const TROPHY_ICONS = {
     '.yyyyyy.',
     '........',
     '........'],
+  overgrowth: [
+    '..G..g..',
+    '.gGGgG..',
+    'gGGGGGg.',
+    'gGgGgGGg',
+    '.hGGGh..',
+    '..hGh...',
+    '..hh....',
+    '.hhhh...'],
 };
 
 function drawPixelIcon(cv, px) {

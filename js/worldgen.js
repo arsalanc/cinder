@@ -476,8 +476,10 @@ function generateBossChamber(seedStr, boss) {
   const noise = makeNoise2D(mulberry32(seed ^ 0x51ED2769));
   clearSim();
 
-  // the tempest is a flyer: give it headroom, taller cover, smaller pools
+  // the tempest is a flyer: give it headroom, taller cover, smaller pools.
+  // The overgrowth's arena is a tinderbox: wooden cover, oil pockets.
   const storm = boss === 'tempest';
+  const grove = boss === 'overgrowth';
   const CEIL = storm ? 15 : 24;
   const FLOOR = SIM_H - 24;
 
@@ -498,7 +500,7 @@ function generateBossChamber(seedStr, boss) {
   // 3. a central water reservoir sunk into the floor — kept clear of the
   //    left spawn shelf and the right portal shelf. The worm's arena gets a
   //    wide quench pool; the tempest's a modest one (its squalls add more).
-  const rw = (storm ? 18 : 32) + (rng() * 8 | 0);
+  const rw = (storm ? 18 : grove ? 14 : 32) + (rng() * 8 | 0);
   const rcx = Math.max(rw + 28, Math.min(SIM_W - rw - 26, (SIM_W >> 1) + (rng() * 30 - 15 | 0)));
   for (let x = rcx - rw; x <= rcx + rw; x++) {
     if (x < 8 || x >= SIM_W - 8) continue;
@@ -515,10 +517,14 @@ function generateBossChamber(seedStr, boss) {
     const ph = (storm ? 22 : 14) + (rng() * 22 | 0);
     const pw = 2 + (rng() * 2 | 0);
     for (let x = px; x < px + pw && x < SIM_W - 6; x++) {
-      for (let y = FLOOR - ph; y < FLOOR; y++) setCell(idx(x, y), E.STONE);
+      // grove arena: pillars are WOOD — cover that doubles as fuel
+      for (let y = FLOOR - ph; y < FLOOR; y++) {
+        setCell(idx(x, y), grove ? E.WOOD : E.STONE);
+      }
       if (storm) {
         for (let d = 1; d <= 3; d++) setCell(idx(x, FLOOR - ph - d), E.METAL);
       }
+      if (grove) setCell(idx(x, FLOOR - ph - 1), E.PLANT);
     }
   }
 
@@ -530,11 +536,25 @@ function generateBossChamber(seedStr, boss) {
     }
   }
 
+  // 5b. grove arena extras: two open OIL pockets sunk into the floor — big
+  //     fire plays for whoever dares to light them
+  if (grove) {
+    for (let p = 0; p < 2; p++) {
+      const ox = 30 + (rng() * (SIM_W - 60) | 0);
+      if (Math.abs(ox - rcx) < rw + 14) continue; // clear of the pool
+      for (let x = ox - 5; x <= ox + 5; x++) {
+        for (let y = FLOOR; y <= FLOOR + 3; y++) setCell(idx(x, y), E.OIL);
+      }
+    }
+  }
+
   // 6. ambient to match the guardian: warm-but-survivable for the worm (the
-  //    fight cranks it hotter via lava); temperate storm air for the tempest
+  //    fight cranks it hotter via lava); temperate storm air for the tempest;
+  //    mild growing weather for the overgrowth
   worldBiomeMap.fill(Math.max(0, BIOMES.findIndex(
-    b => b.name === (storm ? 'Rusted Works' : 'Volcanic Depths'))));
-  ambientTemp.fill(storm ? 18 : 35);
+    b => b.name === (storm ? 'Rusted Works'
+      : grove ? 'Overgrown Vault' : 'Volcanic Depths'))));
+  ambientTemp.fill(storm ? 18 : grove ? 20 : 35);
   temp.set(ambientTemp);
 
   // 7. settle the reservoir (movement only — no chemistry)

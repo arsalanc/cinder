@@ -42,7 +42,7 @@ simHooks.explodeAt = (cx, cy, r) => {
 
 function loadMeta() {
   const m = { bestDepth: 0, wins: 0, kills: 0, runs: 0,
-              wormKills: 0, tempestKills: 0, eliteKills: 0 };
+              wormKills: 0, tempestKills: 0, groveKills: 0, eliteKills: 0 };
   try {
     if (typeof localStorage !== 'undefined') {
       Object.assign(m, JSON.parse(localStorage.getItem('cinder-meta') || '{}'));
@@ -78,6 +78,54 @@ function finishRun(won) {
   return MODIFIERS.filter(isUnlocked).map(m => m.name).filter(n => !before.has(n));
 }
 
+// --- daily-run scoreboard: local bests per daily seed ------------------------
+
+function loadDaily() {
+  const d = {};
+  try {
+    if (typeof localStorage !== 'undefined') {
+      Object.assign(d, JSON.parse(localStorage.getItem('cinder-daily') || '{}'));
+    }
+  } catch (e) { /* private mode / headless: session-only */ }
+  return d;
+}
+
+const dailyBest = loadDaily();
+
+// Called when a daily run ends (death or End Run); keeps the best attempt.
+// `depth` lets End Run pass the depth actually CLEARED (run.depth has already
+// been incremented for the next level by the time the overlay is up).
+function recordDaily(depth) {
+  if (!run.seed.startsWith('daily-')) return;
+  if (typeof replayPlay !== 'undefined' && replayPlay.active) return;
+  const entry = { depth: depth || run.depth, kills: run.kills, won: run.endless || run.won };
+  const prev = dailyBest[run.seed];
+  if (!prev || entry.depth > prev.depth ||
+      (entry.depth === prev.depth && entry.kills > prev.kills)) {
+    dailyBest[run.seed] = entry;
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('cinder-daily', JSON.stringify(dailyBest));
+    }
+  } catch (e) { /* ignore */ }
+  updateDailyHUD();
+}
+
+function updateDailyHUD() {
+  if (typeof document === 'undefined') return;
+  const el = document.getElementById('daily-best');
+  if (!el) return;
+  const d = new Date();
+  const key = 'daily-' + d.getUTCFullYear() + '-' +
+    String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getUTCDate()).padStart(2, '0');
+  const b = dailyBest[key];
+  el.textContent = b
+    ? 'Today’s best: D' + b.depth + (b.won ? ' ✔' : '') + ' · ' + b.kills + ' kills'
+    : '';
+}
+
 // Replays and daily runs inject their seed here before calling startRun
 let pendingRunSeed = null;
 
@@ -103,6 +151,37 @@ function startRun() {
   if (typeof replayBeginRecording === 'function') replayBeginRecording(run.seed);
   beginLevel();
   hideOverlay();
+  maybeShowHello();
+}
+
+// --- first-run onboarding: one overlay, once, never during playback ---------
+let helloShown = false;
+function maybeShowHello() {
+  if (typeof document === 'undefined') return;
+  if (helloShown || meta.runs > 0) return;
+  if (typeof replayPlay !== 'undefined' && replayPlay.active) return;
+  helloShown = true;
+  run.choosing = true; // pause the sim while they read
+  const overlay = document.getElementById('overlay');
+  document.getElementById('overlay-title').textContent = 'Welcome to the depths';
+  document.getElementById('overlay-stats').innerHTML =
+    'Collect the cyan <b>◆ shards</b> to wake the portal, then descend.<br>' +
+    'The mouse casts spells — <b>Dig Blast</b> means no wall can trap you.<br>' +
+    'The world is real: fire spreads, water flows, cold bites. Use it.<br>' +
+    'When something big pulses <b>gold</b>, that is your moment — strike.';
+  const cards = document.getElementById('overlay-cards');
+  cards.innerHTML = '';
+  cards.className = '';
+  const btn = document.createElement('button');
+  btn.className = 'card';
+  btn.innerHTML = '<b>Descend</b><span>Depth 1 awaits.</span>';
+  btn.addEventListener('click', () => {
+    run.choosing = false;
+    hideOverlay();
+  });
+  cards.appendChild(btn);
+  document.getElementById('overlay-action').style.display = 'none';
+  overlay.style.display = 'flex';
 }
 
 function isBossDepth(d) {
@@ -111,11 +190,19 @@ function isBossDepth(d) {
          (d > WIN_DEPTH && (d - WIN_DEPTH) % 3 === 0);
 }
 
+// Which guardian holds each boss depth is decided by the RUN SEED (stable,
+// replay-safe — no rand() stream involved): two different guardians on the
+// way down, then the endless descent rotates through all three.
+const GUARDIANS = ['magmaworm', 'tempest', 'overgrowth'];
+
 function bossKeyFor(d) {
-  if (d === 3) return 'magmaworm';
-  if (d === WIN_DEPTH) return 'tempest';
-  // endless guardians alternate: 9 worm, 12 tempest, 15 worm, ...
-  return (((d - WIN_DEPTH) / 3) & 1) === 1 ? 'magmaworm' : 'tempest';
+  const h = hashSeed(run.seed + '#guardians') >>> 0; // unsigned: modulo stays positive
+  const first = h % 3;
+  const second = (first + 1 + ((h >>> 4) % 2)) % 3; // one of the other two
+  if (d === 3) return GUARDIANS[first];
+  if (d === WIN_DEPTH) return GUARDIANS[second];
+  const n = (d - WIN_DEPTH) / 3; // endless: full rotation, no repeats in a loop
+  return GUARDIANS[(second + n) % 3];
 }
 
 function bossAlive() {
@@ -131,11 +218,9 @@ function spawnBoss() {
   const bx = Math.max(14, Math.min(SIM_W - 14, portal.x + (rand() < 0.5 ? -16 : 16)));
   const by = Math.max(14, portal.y - 6);
   digCircle(bx, by, 9);
-  creatures.push({
-    key, x: bx - t.w / 2, y: by - t.h / 2, vx: 0, vy: 0,
-    w: t.w, h: t.h, hp, maxHp: hp, dir: 1, burning: 0, hurtFlash: 0,
-    bob: 0, attackCd: 90,
-  });
+  creatures.push(makeCreature(key, bx - t.w / 2, by - t.h / 2, {
+    hp, maxHp: hp, dir: 1, bob: 0, attackCd: 90,
+  }));
 }
 
 function beginLevel() {
@@ -368,11 +453,9 @@ function updateGame() {
           for (let k = 0; k < 3; k++) {
             const key = weightedPick(BIOME_SPAWNS[biomeName] || BIOME_SPAWNS['Stone Caverns']);
             const t = CREATURE_TYPES[key];
-            creatures.push({
-              key, x: relic.x - 3 + k * 2, y: relic.y - t.h, vx: 0, vy: 0,
-              w: t.w, h: t.h, hp: t.hp, dir: (k & 1) ? 1 : -1,
-              burning: 0, hurtFlash: 0, bob: 0, attackCd: 30,
-            });
+            creatures.push(makeCreature(key, relic.x - 3 + k * 2, relic.y - t.h, {
+              dir: (k & 1) ? 1 : -1, bob: 0, attackCd: 30,
+            }));
           }
           playSfx('squish');
         }
@@ -390,10 +473,12 @@ function updateGame() {
     if (nearPortal && cleared) levelComplete();
   } else if (!run.dead) {
     run.dead = true;
+    recordDaily();
     const unlocked = finishRun(false);
     if (typeof replayEndRecording === 'function') replayEndRecording();
     playSfx('death');
-    showEndOverlay('You died at depth ' + run.depth, unlocked);
+    showEndOverlay('You died at depth ' + run.depth +
+      (player.lastHurt ? ' — ' + player.lastHurt : ''), unlocked);
   }
 }
 
@@ -425,6 +510,7 @@ function endEndlessRun() {
   run.active = false;
   run.won = true;
   run.choosing = false;
+  recordDaily(run.depth - 1); // the depth actually cleared, not the next one
   const unlocked = finishRun(false); // the win itself was banked at depth 6
   if (typeof replayEndRecording === 'function') replayEndRecording();
   hideOverlay();
@@ -520,6 +606,7 @@ function showCollectionOverlay() {
   const TROPHIES = [
     { name: 'Magma Worm', icon: 'magmaworm', stat: 'wormKills', hint: 'Slay the Magma Worm' },
     { name: 'Tempest', icon: 'tempest', stat: 'tempestKills', hint: 'Slay the Tempest' },
+    { name: 'Overgrowth', icon: 'overgrowth', stat: 'groveKills', hint: 'Slay the Overgrowth' },
     { name: 'Elite Hunter', icon: 'elite', stat: 'eliteKills', hint: 'Fell an elite' },
   ];
   const label = txt => {
@@ -631,11 +718,16 @@ function drawBossBar() {
   let hint = '';
   if ((b.surgeT || 0) > 0) hint = 'MAGMA SURGE — dodge the geysers';
   else if ((b.squallT || 0) > 0) hint = 'STORM SQUALL — take cover';
+  else if ((b.bloomT || 0) > 0) hint = 'BLOOM — survive the overgrowth';
   else if (b.exposedT > 0) hint = 'EXPOSED — strike now (stomp it!)';
   else if ((b.chargingT || 0) > 0) hint = 'CHARGING — get behind cover';
   else if ((b.breachTel || 0) > 0) hint = 'IT\'S COMING UP — move!';
   else if (b.key === 'magmaworm') hint = 'molten shell — quench it in water';
   else if (b.key === 'tempest') hint = 'storm-charged — soak it to short it out';
+  else if (b.key === 'overgrowth') {
+    hint = b.burning > 0 ? 'IT\'S CATCHING — keep it burning!'
+                         : 'regenerating — set it on fire';
+  }
   if (hint) {
     displayCtx.font = '10px monospace';
     displayCtx.textAlign = 'center';

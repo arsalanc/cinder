@@ -8,62 +8,63 @@ Cooldown and range are in sim frames (60 = one second).
 
 ## Spells
 
-| Spell | Mana | Cooldown | Damage | Effect |
-| --- | ---: | ---: | ---: | --- |
-| Spark Bolt | 10 | 12 | 10 | Fast bolt that splashes fire on impact — long range, reliable. |
-| Water Jet | 2 | 2 | 2 | Three-shot spray of water; douses fire and fills basins. |
-| Dig Blast | 4 | 9 | 6 | Excavates a pocket of terrain (never walls). Always in the loadout. |
-| Powder Bomb | 28 | 50 | 18 | Lobbed charge with a devastating explosion. |
-| Acid Spit | 9 | 12 | 9 | Splashes corrosive acid; melts terrain from safety. |
-| Flamethrower | 3 | 2 | 4 | Short-range torrent — a fraction of spark's reach, ~5× the damage. |
-| Arc Bolt | 14 | 18 | 8 | Electrifies water and open air into a lethal zone. |
+| | Spell | Mana | Cooldown | Damage | Effect |
+| :---: | --- | ---: | ---: | ---: | --- |
+| ![spark](sprites/spell-spark.png) | Spark Bolt | 10 | 12 | 10 | Fast bolt that splashes fire on impact — long range, reliable. |
+| ![water](sprites/spell-water.png) | Water Jet | 2 | 2 | 2 | Three-shot spray of water; douses fire and fills basins. |
+| ![dig](sprites/spell-dig.png) | Dig Blast | 4 | 9 | 6 | Excavates a pocket of terrain (never walls). Always in the loadout. |
+| ![bomb](sprites/spell-bomb.png) | Powder Bomb | 28 | 50 | 18 | Lobbed charge with a devastating explosion. |
+| ![acid](sprites/spell-acid.png) | Acid Spit | 9 | 12 | 9 | Splashes corrosive acid; melts terrain from safety. |
+| ![flame](sprites/spell-flame.png) | Flamethrower | 3 | 2 | 4 | Short-range torrent — a fraction of spark's reach, ~5× the damage. |
+| ![arc](sprites/spell-arc.png) | Arc Bolt | 14 | 18 | 8 | Electrifies water and open air into a lethal zone. |
 
 ### Evolutions
 
 A spell **evolves** once your run holds two synergies carrying its
 matching tag (Arc Bolt instead evolves through the Stormcore trophy).
 
-| Spell | Tag ×2 | Evolves into |
-| --- | --- | --- |
-| Spark Bolt | fire | Meteor Bolt |
-| Water Jet | frost | Glacier Jet |
-| Dig Blast | mobility | Tunnel Charge |
-| Powder Bomb | blast | Powder Keg |
-| Acid Spit | acid | Dissolver |
-| Flamethrower | fire | Dragon's Breath |
+| Spell | Tag ×2 | | Evolves into |
+| --- | --- | :---: | --- |
+| Spark Bolt | fire | ![meteor](sprites/evo-meteor.png) | Meteor Bolt |
+| Water Jet | frost | ![glacier](sprites/evo-glacier.png) | Glacier Jet |
+| Dig Blast | mobility | ![tunnel](sprites/evo-tunnel.png) | Tunnel Charge |
+| Powder Bomb | blast | ![keg](sprites/evo-keg.png) | Powder Keg |
+| Acid Spit | acid | ![dissolver](sprites/evo-dissolver.png) | Dissolver |
+| Flamethrower | fire | ![dragon](sprites/evo-dragon.png) | Dragon's Breath |
 
 ## Synergies
 
 Between levels you pick one of three synergies. Some are locked until a
 milestone (best depth, wins, or kills) is reached.
 
-| Synergy | Effect | Unlock |
-| --- | --- | --- |
-| Pyromaniac | The world is far more flammable and burns longer. Fire only tickles you. | starter |
-| Fireproof Hide | Fire barely hurts, lava is survivable, and you stop burning almost immediately. | starter |
-| Frost Aura | The surface of water near you freezes into a walkable crust. The depths stay liquid. | starter |
-| Lava Strider | Lava you approach crusts into stone, and what does touch you burns less. | 1 win |
-| Steam Sprite | Steam heals you and lingers far longer. Boil a lake, breathe it in. | starter |
-| Green Thumb | Plants spread through water aggressively, and trampling them heals you. | starter |
-| Acid Blood | Taking damage makes you leak acid, and acid corrodes you far less. | 15 kills |
-| Demolitionist | Explosions are much bigger. Gunpowder is your friend. Probably. | reach depth 4 |
-| Fleetfoot | Move faster and jump higher. | starter |
-| Powder Bomb | Your wand learns Powder Bomb: a lobbed charge with a devastating blast. | reach depth 3 |
-| Acid Spit | Your wand learns Acid Spit: melt terrain from a safe distance. | starter |
-| Flamethrower | Your wand learns Flamethrower: point blank, everything burns. Including, possibly, you. | 10 kills |
-| Arc Bolt | Your wand learns Arc Bolt: electricity that turns pools into kill zones. | starter |
-| Overcharge | Mana regenerates 80% faster. Cast with abandon. | starter |
-| Wand: Twin Cast | Every cast fires an extra projectile, at a slight cooldown cost. | reach depth 2 |
-| Wand: Rapid Fire | Your wand cools down 45% faster. | starter |
-| Wand: Amplifier | Projectiles hit 50% harder and burst with a bigger splash. | starter |
-| Wand: Bouncing Shots | Projectiles ricochet off terrain one more time before bursting. | 25 kills |
-| Storm Caller | The storm never ends — and its lightning never strikes near you. | reach depth 5 |
-| Insulated | Electricity barely tickles you. Live water is your wading pool. | starter |
-| Executioner | Vulnerability windows last half again as long. Make them count. | fell 5 elites |
-| Wormheart | The worm's furnace beats in your chest: burning no longer harms you — it keeps you warm. | slay the Magma Worm |
-| Stormcore | You took its weapon: Arc Bolt impacts call down a real lightning strike. | slay the Tempest |
-| Iron Boots | Landing on any enemy crushes it, armor and all — then you bounce clear. | starter |
-| Winter Pelt | Hypothermia cannot touch you. Heat, though, bites much harder. | starter |
-| Furnace Heart | Heatstroke cannot touch you. The cold, though, bites much harder. | starter |
-| Ember Heart | You radiate furnace heat: never cold, ice and snow melt around you — but water simmers away near you. | 20 kills |
-| Tunneler | Stone, sand, and ice near you slowly crumble away. You are the shovel. | starter |
+| | Synergy | Effect | Unlock |
+| :---: | --- | --- | --- |
+| ![Pyromaniac](sprites/mod-pyromaniac.png) | Pyromaniac | The world is far more flammable and burns longer. Fire only tickles you. | starter |
+| ![Fireproof Hide](sprites/mod-fireproof-hide.png) | Fireproof Hide | Fire barely hurts, lava is survivable, and you stop burning almost immediately. | starter |
+| ![Frost Aura](sprites/mod-frost-aura.png) | Frost Aura | The surface of water near you freezes into a walkable crust. The depths stay liquid. | starter |
+| ![Lava Strider](sprites/mod-lava-strider.png) | Lava Strider | Lava you approach crusts into stone, and what does touch you burns less. | 1 win |
+| ![Steam Sprite](sprites/mod-steam-sprite.png) | Steam Sprite | Steam heals you and lingers far longer. Boil a lake, breathe it in. | starter |
+| ![Green Thumb](sprites/mod-green-thumb.png) | Green Thumb | Plants spread through water aggressively, and trampling them heals you. | starter |
+| ![Acid Blood](sprites/mod-acid-blood.png) | Acid Blood | Taking damage makes you leak acid, and acid corrodes you far less. | 15 kills |
+| ![Demolitionist](sprites/mod-demolitionist.png) | Demolitionist | Explosions are much bigger. Gunpowder is your friend. Probably. | reach depth 4 |
+| ![Fleetfoot](sprites/mod-fleetfoot.png) | Fleetfoot | Move faster and jump higher. | starter |
+| ![Powder Bomb](sprites/mod-powder-bomb.png) | Powder Bomb | Your wand learns Powder Bomb: a lobbed charge with a devastating blast. | reach depth 3 |
+| ![Acid Spit](sprites/mod-acid-spit.png) | Acid Spit | Your wand learns Acid Spit: melt terrain from a safe distance. | starter |
+| ![Flamethrower](sprites/mod-flamethrower.png) | Flamethrower | Your wand learns Flamethrower: point blank, everything burns. Including, possibly, you. | 10 kills |
+| ![Arc Bolt](sprites/mod-arc-bolt.png) | Arc Bolt | Your wand learns Arc Bolt: electricity that turns pools into kill zones. | starter |
+| ![Overcharge](sprites/mod-overcharge.png) | Overcharge | Mana regenerates 80% faster. Cast with abandon. | starter |
+| ![Wand: Twin Cast](sprites/mod-wand-twin-cast.png) | Wand: Twin Cast | Every cast fires an extra projectile, at a slight cooldown cost. | reach depth 2 |
+| ![Wand: Rapid Fire](sprites/mod-wand-rapid-fire.png) | Wand: Rapid Fire | Your wand cools down 45% faster. | starter |
+| ![Wand: Amplifier](sprites/mod-wand-amplifier.png) | Wand: Amplifier | Projectiles hit 50% harder and burst with a bigger splash. | starter |
+| ![Wand: Bouncing Shots](sprites/mod-wand-bouncing-shots.png) | Wand: Bouncing Shots | Projectiles ricochet off terrain one more time before bursting. | 25 kills |
+| ![Storm Caller](sprites/mod-storm-caller.png) | Storm Caller | The storm never ends — and its lightning never strikes near you. | reach depth 5 |
+| ![Insulated](sprites/mod-insulated.png) | Insulated | Electricity barely tickles you. Live water is your wading pool. | starter |
+| ![Executioner](sprites/mod-executioner.png) | Executioner | Vulnerability windows last half again as long. Make them count. | fell 5 elites |
+| ![Wormheart](sprites/mod-wormheart.png) | Wormheart | The worm's furnace beats in your chest: burning no longer harms you — it keeps you warm. | slay the Magma Worm |
+| ![Stormcore](sprites/mod-stormcore.png) | Stormcore | You took its weapon: Arc Bolt impacts call down a real lightning strike. | slay the Tempest |
+| ![Heartseed](sprites/mod-heartseed.png) | Heartseed | The grove accepts you: foliage parts for you instead of slowing you, and trampling it heals. | slay the Overgrowth |
+| ![Iron Boots](sprites/mod-iron-boots.png) | Iron Boots | Landing on any enemy crushes it, armor and all — then you bounce clear. | starter |
+| ![Winter Pelt](sprites/mod-winter-pelt.png) | Winter Pelt | Hypothermia cannot touch you. Heat, though, bites much harder. | starter |
+| ![Furnace Heart](sprites/mod-furnace-heart.png) | Furnace Heart | Heatstroke cannot touch you. The cold, though, bites much harder. | starter |
+| ![Ember Heart](sprites/mod-ember-heart.png) | Ember Heart | You radiate furnace heat: never cold, ice and snow melt around you — but water simmers away near you. | 20 kills |
+| ![Tunneler](sprites/mod-tunneler.png) | Tunneler | Stone, sand, and ice near you slowly crumble away. You are the shovel. | starter |
