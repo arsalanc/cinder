@@ -809,8 +809,26 @@ function updateGrove(c, t, dx, dy, dist, chase) {
     const spd = t.speed * (phase === 3 ? 1.5 : phase === 2 ? 1.2 : 1);
     c.vx = c.dir * spd;
     if (creatureCollides(c, c.x + c.dir, c.y)) {
-      if (!creatureCollides(c, c.x + c.dir, c.y - 2)) c.vy = -1.2; // clamber
-      else c.vx = 0; // blocked: it holds ground and mortars instead
+      if (!creatureCollides(c, c.x + c.dir, c.y - 2)) {
+        c.vy = -1.2; // clamber a low step
+      } else {
+        // walled in: its roots PRY the stone apart — a slow chew that
+        // guarantees it always reaches you (never stuck, never fast)
+        c.vx = 0;
+        c.chewT = (c.chewT || 0) + 1;
+        if (c.chewT >= 14) {
+          c.chewT = 0;
+          const fx = Math.max(2, Math.min(SIM_W - 3,
+            Math.round(c.dir > 0 ? c.x + c.w + 1 : c.x - 2)));
+          const fy = Math.round(c.y + c.h / 2);
+          digCircle(fx, fy, 2);
+          // root residue marks the bored tunnel
+          if (rand() < 0.4 && grid[idx(fx, fy + 2)] !== E.EMPTY &&
+              grid[idx(fx, fy + 1)] === E.EMPTY) {
+            setCell(idx(fx, fy + 1), E.PLANT);
+          }
+        }
+      }
     }
   }
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(c.vx), Math.abs(c.vy)) / 0.45));

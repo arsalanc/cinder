@@ -514,6 +514,22 @@ const out = vm.runInContext(`
     unpinPlayer();
   });
 
+  test('a walled-in overgrowth chews through stone to reach you', () => {
+    stoneWorld();
+    // two pockets separated by a thick stone wall — no path over or around
+    for (let x = 100; x < 140; x++)
+      for (let y = 24; y < 40; y++) setCell(idx(x, y), E.EMPTY);
+    for (let x = 170; x < 210; x++)
+      for (let y = 24; y < 40; y++) setCell(idx(x, y), E.EMPTY);
+    pinPlayer(120, 34);
+    const c = pushGrove(190, 35);
+    const d0 = Math.abs(c.x - player.x);
+    for (let k = 0; k < 1800 && c.x > 145; k++) { simStep(); updateCreatures(); }
+    assert(c.x < 165, 'grove never breached the wall: x=' + c.x.toFixed(0));
+    assert(Math.abs(c.x - player.x) < d0 - 20, 'grove made no real progress');
+    unpinPlayer();
+  });
+
   test('the grove arena is a tinderbox: wood pillars and oil pockets', () => {
     const b = bossLevelWith('overgrowth', 3);
     assert(b, 'no overgrowth arena found');
