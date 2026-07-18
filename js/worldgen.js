@@ -1,12 +1,16 @@
 // CINDER — procedural world generation
 // Seeded caves + biome materials. Pipeline:
-//   1. seeded value-noise fBm carves caverns under a rough terrain surface
-//   2. drunkard-walk tunnels add vertical routes
-//   3. flood-fill connectivity pass tunnels stray pockets into the main cave
-//   4. Voronoi biome regions (jittered borders) assign materials + veins
-//   5. liquid pools are dropped in, then the sim itself runs in "settle mode"
-//      (movement only, no fire/reactions) so pools rest naturally
-//   6. decoration pass: plants, surface grass
+//   1. rough terrain surface line
+//   2. Voronoi biome regions (jittered borders) assigned first, so the carve
+//      can read them — each biome digs differently
+//   3. seeded value-noise fBm carves caverns, biased by a per-seed openness
+//      roll plus each biome's own `open` bias
+//   4. drunkard-walk tunnels add vertical routes
+//   5. most seeds carve one grand chamber — a vast vault with a biome lake
+//   6. flood-fill connectivity pass tunnels stray pockets into the main cave
+//   7. materials committed, liquid pools dropped in, then the sim itself runs
+//      in "settle mode" (movement only, no fire/reactions) so pools rest
+//   8. decoration pass: plants, surface grass, fauna, machinery
 // Biomes are plain data (like REACTIONS) so roguelite modifiers can add or
 // mutate them per-run.
 
@@ -72,13 +76,15 @@ function fbm(noise, x, y, octaves) {
 // depth: [min,max] fraction of the underground where this biome may appear
 // (0 = just below the surface, 1 = bottom of the map)
 
+// `open` biases the cave carve inside the biome: positive digs wider halls,
+// negative pinches the tunnels. Volcanic depths yawn; ice caves squeeze.
 const BIOMES = [
-  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, fungus: 0.006, temp: 12,  depth: [0, 1] },
+  { name: 'Stone Caverns',   base: E.STONE, vein: E.SAND,      veinAmount: 0.30, liquid: E.WATER, liquidAmount: 0.30, deco: E.PLANT, decoAmount: 0.05, fauna: 0.004, fungus: 0.006, temp: 12,  depth: [0, 1], open: 0 },
   { name: 'Overgrown Vault', base: E.STONE, vein: E.WOOD,      veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.40, deco: E.PLANT, decoAmount: 0.85,
-    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, fungus: 0.002, temp: 22, depth: [0, 0.6] },
-  { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    temp: -12, depth: [0, 0.7] },
-  { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    fungus: 0.004, temp: 18,  depth: [0.3, 1],  hazardous: true },
-  { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    temp: 55,  depth: [0.55, 1], hazardous: true },
+    vineChance: 0.30, vineLen: 10, tuftChance: 0.35, tuftLen: 4, fauna: 0.02, fungus: 0.002, temp: 22, depth: [0, 0.6], open: 0.012 },
+  { name: 'Ice Caves',       base: E.ICE,   vein: E.STONE,     veinAmount: 0.35, liquid: E.WATER, liquidAmount: 0.20, deco: 0,       decoAmount: 0,    temp: -12, depth: [0, 0.7], open: -0.012 },
+  { name: 'Oil Caverns',     base: E.STONE, vein: E.GUNPOWDER, veinAmount: 0.20, liquid: E.OIL,   liquidAmount: 0.45, deco: 0,       decoAmount: 0,    fungus: 0.004, temp: 18,  depth: [0.3, 1],  hazardous: true, open: 0.008 },
+  { name: 'Volcanic Depths', base: E.STONE, vein: E.SAND,      veinAmount: 0.15, liquid: E.LAVA,  liquidAmount: 0.35, deco: 0,       decoAmount: 0,    temp: 55,  depth: [0.55, 1], hazardous: true, open: 0.022 },
   // Rusted Works: a deep industrial ruin. Metal terrain (conductive — sparks
   // and lightning race through the walls) streaked with rust (sand veins),
   // seeped puddles, and abandoned machinery (`works`). Warm from old furnaces.
@@ -87,6 +93,10 @@ const BIOMES = [
 
 const worldBiomeMap = new Uint8Array(CELLS);
 let worldSeed = '';
+
+// Per-generation facts other systems (and tests) can read: the seed's rolled
+// openness bias and the grand chamber's bounds (null when the seed has none).
+let worldInfo = { openness: 0, chamber: null };
 
 // --- carving helpers --------------------------------------------------------
 
@@ -210,34 +220,14 @@ function generateWorld(seedStr, runDepth = 0) {
   const jitterNoise = makeNoise2D(mulberry32(seed ^ 0xC2B2AE35));
   const surfNoise   = makeNoise2D(mulberry32(seed ^ 0x27D4EB2F));
 
-  // 1. terrain surface line, then noise-carved caverns below it
+  // 1. terrain surface line
   const surf = new Int16Array(SIM_W);
   for (let x = 0; x < SIM_W; x++) {
     surf[x] = 20 + (fbm(surfNoise, x * 0.02, 0.5, 3) * 16) | 0;
   }
-  const solid = new Uint8Array(CELLS);
-  for (let y = 0; y < SIM_H; y++) {
-    for (let x = 0; x < SIM_W; x++) {
-      if (y <= surf[x]) continue; // sky
-      const depth = (y - surf[x]) / (SIM_H - surf[x]);
-      if (y - surf[x] < 4) { solid[idx(x, y)] = 1; continue; } // ground crust
-      const n = fbm(caveNoise, x * 0.04, y * 0.04, 4);
-      // deeper = slightly more closed-in
-      if (n > 0.52 - depth * 0.08) solid[idx(x, y)] = 1;
-    }
-  }
 
-  // 2. a couple of winding tunnels from the surface toward the depths
-  for (let t = 0; t < 3; t++) {
-    const sx = 20 + (rng() * (SIM_W - 40)) | 0;
-    carveTunnel(solid, sx, surf[sx] + 2,
-                20 + (rng() * (SIM_W - 40)) | 0, SIM_H - 10, rng);
-  }
-
-  // 3. guarantee the cave system is one connected space
-  connectCaverns(solid, rng);
-
-  // 4. biome regions: jittered Voronoi over scattered seed sites
+  // 2. biome regions first (jittered Voronoi over scattered seed sites), so
+  //    the carve below can read each cell's biome
   const avgSurf = 28;
   const sites = [];
   while (sites.length < 12) {
@@ -269,7 +259,70 @@ function generateWorld(seedStr, runDepth = 0) {
     }
   }
 
-  // 5. commit materials to the sim grid
+  // 3. noise-carved caverns below the surface. Openness varies per seed —
+  //    some seeds roll cathedral caverns, others tight warrens — and each
+  //    biome adds its own bias on top (BIOMES[].open).
+  const openness = -0.015 + rng() * 0.04;
+  worldInfo = { openness, chamber: null };
+  const solid = new Uint8Array(CELLS);
+  for (let y = 0; y < SIM_H; y++) {
+    for (let x = 0; x < SIM_W; x++) {
+      if (y <= surf[x]) continue; // sky
+      const depth = (y - surf[x]) / (SIM_H - surf[x]);
+      if (y - surf[x] < 4) { solid[idx(x, y)] = 1; continue; } // ground crust
+      const n = fbm(caveNoise, x * 0.04, y * 0.04, 4);
+      const open = openness + (BIOMES[worldBiomeMap[idx(x, y)]].open || 0);
+      // deeper = slightly more closed-in
+      if (n > 0.52 + open - depth * 0.08) solid[idx(x, y)] = 1;
+    }
+  }
+
+  // 4. a couple of winding tunnels from the surface toward the depths
+  for (let t = 0; t < 3; t++) {
+    const sx = 20 + (rng() * (SIM_W - 40)) | 0;
+    carveTunnel(solid, sx, surf[sx] + 2,
+                20 + (rng() * (SIM_W - 40)) | 0, SIM_H - 10, rng);
+  }
+
+  // 5. grand chamber: most seeds get one vast vault, carved before the
+  //    connectivity pass so it always joins the cave system. Its floor takes
+  //    a proper lake later — whatever the local biome bleeds.
+  if (rng() < 0.65) {
+    const grx = 18 + (rng() * 12 | 0);
+    const gry = 10 + (rng() * 6 | 0);
+    const gx = grx + 24 + (rng() * (SIM_W - 2 * (grx + 24))) | 0;
+    const gy = 72 + (rng() * (SIM_H - 72 - gry - 12)) | 0;
+    for (let dy = -gry; dy <= gry; dy++) {
+      const y = gy + dy;
+      if (y < 44 || y >= SIM_H - 6) continue;
+      for (let dx = -grx; dx <= grx; dx++) {
+        const x = gx + dx;
+        if (x < 4 || x >= SIM_W - 4) continue;
+        const e = (dx * dx) / (grx * grx) + (dy * dy) / (gry * gry);
+        // noise-roughened ellipse edge so it reads as a cavern, not a stamp
+        if (e <= 1 + (caveNoise(x * 0.15, y * 0.15) - 0.5) * 0.5) solid[idx(x, y)] = 0;
+      }
+    }
+    // basin liner: a solid shell under the lower half so the chamber's lake
+    // holds instead of draining into whatever caves run beneath. If it cuts
+    // a tunnel, the connectivity pass below re-routes around it.
+    for (let dy = 1; dy <= gry + 3; dy++) {
+      const y = gy + dy;
+      if (y < 44 || y >= SIM_H - 4) continue;
+      for (let dx = -grx - 3; dx <= grx + 3; dx++) {
+        const x = gx + dx;
+        if (x < 4 || x >= SIM_W - 4) continue;
+        const e = (dx * dx) / (grx * grx) + (dy * dy) / (gry * gry);
+        if (e > 1 && e <= 1.6) solid[idx(x, y)] = 1;
+      }
+    }
+    worldInfo.chamber = { x: gx, y: gy, rx: grx, ry: gry };
+  }
+
+  // 6. guarantee the cave system is one connected space
+  connectCaverns(solid, rng);
+
+  // 7. commit materials to the sim grid
   clearSim();
   for (let y = 0; y < SIM_H; y++) {
     for (let x = 0; x < SIM_W; x++) {
@@ -285,7 +338,7 @@ function generateWorld(seedStr, runDepth = 0) {
     }
   }
 
-  // 6. liquid pools on cavern floors
+  // 8. liquid pools on cavern floors
   for (let y = 4; y < SIM_H - 4; y++) {
     for (let x = 4; x < SIM_W - 4; x++) {
       const i = idx(x, y);
@@ -296,13 +349,29 @@ function generateWorld(seedStr, runDepth = 0) {
       }
     }
   }
+  //    the grand chamber floor takes a lake of the local biome's liquid
+  if (worldInfo.chamber) {
+    const ch = worldInfo.chamber;
+    const liq = BIOMES[worldBiomeMap[idx(ch.x, ch.y)]].liquid;
+    for (let dy = (ch.ry * 0.45) | 0; dy <= ch.ry; dy++) {
+      const y = ch.y + dy;
+      if (y >= SIM_H - 5) break;
+      for (let dx = -ch.rx; dx <= ch.rx; dx++) {
+        const x = ch.x + dx;
+        if (x < 4 || x >= SIM_W - 4) continue;
+        if ((dx * dx) / (ch.rx * ch.rx) + (dy * dy) / (ch.ry * ch.ry) > 1) continue;
+        const i = idx(x, y);
+        if (grid[i] === E.EMPTY) setCell(i, liq);
+      }
+    }
+  }
 
-  // 7. let liquids and loose powders settle (movement only — no fire/chemistry)
+  // 9. let liquids and loose powders settle (movement only — no fire/chemistry)
   worldSettling = true;
   for (let k = 0; k < 300; k++) simStep();
   worldSettling = false;
 
-  // 8. decoration: vegetation coating on cave surfaces, plus (per biome)
+  // 10. decoration: vegetation coating on cave surfaces, plus (per biome)
   //    vines hanging from ceilings and grass tufts growing from floors
   const isGrowBase = id => id === E.STONE || id === E.ICE || id === E.WOOD;
   for (let y = 2; y < SIM_H - 4; y++) {
@@ -354,7 +423,7 @@ function generateWorld(seedStr, runDepth = 0) {
     }
   }
 
-  // 9. set-pieces: life beyond the flora coating.
+  // 11. set-pieces: life beyond the flora coating.
   //    Mushroom groves sprout from dark cavern floors (stalk + cap)
   for (let y = 4; y < SIM_H - 5; y++) {
     for (let x = 5; x < SIM_W - 5; x++) {
@@ -412,7 +481,7 @@ function generateWorld(seedStr, runDepth = 0) {
     }
   }
 
-  // 10. machinery: abandoned works, but only in the Rusted Works biome where
+  // 12. machinery: abandoned works, but only in the Rusted Works biome where
   //     they belong (generators wired to coolant basins, oil vats, munitions
   //     crates). Placed on any solid ledge with clear air; reachability is
   //     re-checked after generation, so a machine can't seal the level.
@@ -444,7 +513,7 @@ function generateWorld(seedStr, runDepth = 0) {
     machinesLeft--;
   }
 
-  // 11. ambient temperature from the biome map (ice caves are freezing, the
+  // 13. ambient temperature from the biome map (ice caves are freezing, the
   //     volcanic depths swelter) — the field starts at its equilibrium
   for (let ty = 0; ty < TEMP_H; ty++) {
     for (let tx = 0; tx < TEMP_W; tx++) {
@@ -475,6 +544,7 @@ function generateBossChamber(seedStr, boss) {
   const rng = mulberry32(seed);
   const noise = makeNoise2D(mulberry32(seed ^ 0x51ED2769));
   clearSim();
+  worldInfo = { openness: 0, chamber: null };
 
   // the tempest is a flyer: give it headroom, taller cover, smaller pools.
   // The overgrowth's arena is a tinderbox: wooden cover, oil pockets.

@@ -12,7 +12,7 @@ runs from `file://`. Load order matters (each file assumes the ones above it):
 | --- | --- |
 | `js/elements.js` | **Data layer.** Element definitions (movement archetype, density, flammability, colors) and the `REACTIONS` table. |
 | `js/sim.js` | **Simulation core.** Cell grid (structure-of-arrays typed arrays), per-frame update, movement rules, reactions, explosions, the temperature field. Knows nothing about rendering or input. |
-| `js/worldgen.js` | **Procedural generation.** Seeded PRNG + value noise, cave carving, connectivity pass, Voronoi biome regions, liquid pools, decoration, machinery set-pieces. |
+| `js/worldgen.js` | **Procedural generation.** Seeded PRNG + value noise; Voronoi biome regions assigned first so the cave carve can read them (per-seed openness roll + per-biome `open` bias); grand-chamber set-piece with basin-lined biome lake; connectivity pass; liquid pools, decoration, machinery set-pieces. `worldInfo` exposes the seed's openness and chamber bounds. |
 | `js/player.js` | **Player entity.** AABB with pixel collision against the grid, swimming, jetpack, hazard damage, burning + body-warmth status. The sim never sees the player. |
 | `js/spells.js` | **Wand & spells.** Mana, cooldowns, projectiles that paint elements on impact; wand-composition modifiers; spell **evolutions** (`spellForm`, memoized on the mod list); all 8×8 pixel icons (`ICON_PX` / `MOD_ICONS` / `TROPHY_ICONS`). Dig Blast is always in the loadout (anti-soft-lock). |
 | `js/synergies.js` | **Synergy system.** Tagged run modifiers that mutate live element data and `runState`; tag-weighted rolls. Baseline snapshot for clean resets. |
@@ -82,7 +82,7 @@ or not it's on screen.
 
 Headless smoke tests load the JS into a Node `vm` context (browser APIs only
 run inside init functions, which the tests never call) and assert on grid
-state after N steps. The suites live in **`tests/`** — 22 files, 220+ tests —
+state after N steps. The suites live in **`tests/`** — 23 files, 240 tests —
 covering the sim, worldgen, player, runs, spells, determinism, creatures,
 bosses, elites, vaults, evolutions, temperature, seasons, industry, replays,
 and more. `node tests/run.js` runs everything in parallel (~5 minutes);

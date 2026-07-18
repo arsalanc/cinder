@@ -265,7 +265,8 @@ active slot, dimmed icons when mana is short, click or 1–5 to select.
 
 ## Roguelite roadmap
 
-1. ~~**World gen**~~ — done (single-screen; chunked scrolling levels later).
+1. ~~**World gen**~~ — done (single-screen by design; chunked scrolling
+   retired 2026-07, openness variance instead).
 2. ~~**Player entity**~~ — done.
 3. ~~**Synergy system**~~ — done, with meta-unlock gating.
 4. ~~**Wand & spells**~~ — done, with composition modifiers.
@@ -443,6 +444,29 @@ with a sprite column. A test asserts every documented sprite file exists.
 - **Health-economy item dropped after verification**: `placeSpawn` already
   restores full HP each depth — the attrition concern was wrong; pressure
   is per-level by design.
+
+**Worldgen openness pass (done, 2026-07):** answer to "should we consider
+bigger maps and more open areas?" — openness first, size later, chunks never.
+- **Per-seed openness roll** (`worldInfo.openness`, −0.015..+0.025 carve
+  bias): some seeds are cathedral caverns, others tight warrens. Measured
+  underground open fraction now spans ~0.39–0.66 across seeds (was roughly
+  uniform ~0.45).
+- **Per-biome carve bias** (`BIOMES[].open`): Volcanic Depths yawn (+0.022),
+  Overgrown Vault airy, Ice Caves pinch (−0.012). Required reordering the
+  pipeline — biome Voronoi is now assigned *before* the carve so the carve
+  can read it.
+- **Grand chamber**: ~65% of seeds carve one vast noise-roughened elliptical
+  vault (r ~18-29 × 10-15) mid-depth, before the connectivity pass (so it
+  always joins the caves), with a **basin liner** under its lower half so it
+  holds a lake of the local biome's liquid (a volcanic chamber is a lava
+  sea; kelp/fish colonize big water ones via the existing passes).
+  `worldInfo.chamber` exposes its bounds for future set-piece tenants
+  (elite lair, shrine).
+- Decisions recorded: a fixed-grid bump to **384×240** stays on the table
+  (the replay cursor format's 9+8 coord bits fit it without a format break)
+  but only with an FPS measurement first; **chunked scrolling worlds are
+  retired** — they'd put chunk-activation order inside the replay contract
+  and CINDER's identity is the fully-simulating terrarium, not traversal.
 
 **Batch 4 (candidate ideas):**
 - **Glacier Jet rework** (playtest 2026-07: low damage — 6/hit vs Water
@@ -736,7 +760,10 @@ terrain physically live in:
 - Spell triggers (Noita-style): spells that cast other spells on impact.
 - More set-pieces: shrines, collapsed shafts, buried caches worth a detour.
 - Replay sharing (export/import strings); replay scrubbing/speed controls.
-- Chunked scrolling worlds (bigger than one screen) with sim sleeping.
+- ~~Chunked scrolling worlds~~ — retired 2026-07 (see the openness pass:
+  it would drag chunk order into the replay contract for a game whose charm
+  is that everything always simulates). If more room is ever wanted, the
+  path is a one-time 384×240 grid bump, FPS-measured first.
 
 Worth trying in sandbox today: oil already floats on water (density 20 vs
 30), so burning slicks on pools work emergently.
